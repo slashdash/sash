@@ -1,0 +1,11 @@
+{
+  "events": [
+    {"t": 0.20, "type": "shortcut", "chord": "cmd+shift+space"},
+    {"t": 0.60, "type": "tap", "key": "settings"},
+    {"t": 1.00, "type": "tap", "key": "set-top"},
+    {"t": 1.20, "type": "tap", "key": "set-focus"},
+    {"t": 1.40, "type": "tap", "key": "hotkey-button"},
+    {"t": 1.60, "type": "key", "name": "j", "code": "j", "cmd": true, "shift": true},
+    {"t": 1.80, "type": "mark", "name": "end"}
+  ]
+}

@@ -1,0 +1,13 @@
+# Build output
+/target
+/dist
+
+# Vendored sources: run scripts/fetch-libghostty.sh. rune comes from Cargo's git cache.
+/vendor
+
+# Local screenshots from headless runs
+*.png
+!/demo/*.png
+
+# Agent worktrees and backups
+/.opencode/

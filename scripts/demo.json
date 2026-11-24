@@ -1,0 +1,8 @@
+{
+  "events": [
+    {"t": 0.20, "type": "shortcut", "chord": "cmd+shift+space"},
+    {"t": 0.50, "type": "type", "text": "echo hi", "every": 0.02},
+    {"t": 0.80, "type": "key", "name": "Enter"},
+    {"t": 1.00, "type": "mark", "name": "end"}
+  ]
+}
