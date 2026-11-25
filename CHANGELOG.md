@@ -6,6 +6,11 @@ All notable changes to Sash are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Build libghostty-vt 1.0.2 from the pinned stable source with Zig, replacing
+  the nightly prebuilt binary.
+
 ## [0.1.0] - 2026-11-26
 
 First public test build.

@@ -20,27 +20,27 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
 fn main() {
     let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if os != "macos" {
-        panic!("sash currently links the macOS libghostty-vt build only (target OS: {os})");
+        panic!("sash is macOS-only for now (target OS: {os})");
     }
-    // The shipped XCFramework carries one universal slice for both architectures.
-    let slice = "macos-arm64_x86_64";
 
     let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    let xcf = root
-        .join("vendor/ghostty-vt/ghostty-vt.xcframework")
-        .join(slice);
-    let headers = xcf.join("Headers");
+    // Keep in step with scripts/fetch-libghostty.sh.
+    let lib = root.join("vendor/ghostty-vt/1.0.2");
+    let headers = lib.join("include");
     assert!(
         headers.join("ghostty/vt.h").exists(),
         "libghostty-vt headers missing at {}; run scripts/fetch-libghostty.sh",
         headers.display()
     );
 
-    println!("cargo:rustc-link-search=native={}", xcf.display());
+    println!(
+        "cargo:rustc-link-search=native={}",
+        lib.join("lib").display()
+    );
     println!("cargo:rustc-link-lib=static=ghostty-vt");
     println!(
         "cargo:rerun-if-changed={}",
-        xcf.join("libghostty-vt.a").display()
+        lib.join("lib/libghostty-vt.a").display()
     );
     println!("cargo:rerun-if-changed=build.rs");
 

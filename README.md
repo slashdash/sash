@@ -111,18 +111,19 @@ Quit Sash from the ghost menu, drag it to the Trash, then optionally remove
 
 ## Build from source
 
-Requirements: macOS 12+, Rust 1.85+ (edition 2024), and the Xcode command-line
-tools.
+Requirements: macOS 12+, Rust 1.85+ (edition 2024), Zig 0.17+, and the Xcode
+command-line tools.
 
 ```sh
 git clone https://github.com/slashdash/sash.git
 cd sash
-scripts/fetch-libghostty.sh   # prebuilt libghostty-vt, checksum-pinned
+scripts/fetch-libghostty.sh   # builds libghostty-vt 1.0.2 with Zig
 cargo run --release           # the menu-bar item appears; press ⌘⇧Space
 ```
 
-The first build compiles Rune from Cargo's git cache and takes a few minutes.
-Rune is pre-release and pinned to a `dev` revision in `Cargo.toml`.
+The first build compiles libghostty-vt (about a minute) and Rune from Cargo's
+git cache, so give it a few minutes. Rune is pre-release and pinned to a `dev`
+revision in `Cargo.toml`; libghostty-vt is the stable `vt-1.0.2` source.
 
 App bundles and test images:
 
@@ -320,7 +321,7 @@ carries the same notices in `Contents/Resources/Third-Party Notices.html`.
 
 ## Acknowledgements
 
-- [Ghostty](https://ghostty.org) and its libghostty-vt terminal core (MIT).
+- [Ghostty](https://ghostty.org) and its libghostty-vt 1.0.2 terminal core (MIT).
 - [Rune](https://github.com/anomalyco/rune) for the UI, window and tray layer (MIT).
 - The drop-down conventions this borrows from Guake, Yakuake and iTerm2's hotkey
   window.

@@ -19,8 +19,9 @@ scripts/fetch-libghostty.sh
 cargo run --release
 ```
 
-macOS 12+, Rust 1.85+ (edition 2024), and the Xcode command-line tools are
-required. Rune is pinned to a `dev` revision and the first build takes a few
+macOS 12+, Rust 1.85+ (edition 2024), Zig 0.17+, and the Xcode command-line
+tools are required. `scripts/fetch-libghostty.sh` builds libghostty-vt 1.0.2
+from source on first run. Rune is pinned to a `dev` revision and the first build takes a few
 minutes.
 
 ## Checks

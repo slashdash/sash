@@ -31,7 +31,20 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Fetch libghostty-vt
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.1
+
+      - name: Cache libghostty-vt
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor/ghostty-vt
+            ~/.cache/zig
+          key: libghostty-1.0.2-zig-0.17.1-${{ runner.os }}
+
+      - name: Build libghostty-vt
         run: scripts/fetch-libghostty.sh
 
       - run: cargo fmt --check
