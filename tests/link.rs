@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 use sash::ffi;
 
 #[test]

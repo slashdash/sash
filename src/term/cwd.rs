@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! The live working directory of a child process, via libproc.
 //!
 //! Shells only report their directory through OSC 7 when the user configures it, so a

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! Pure input helpers: link detection, paste shaping, wheel accumulation.
 
 /// A whole-line confirmation is needed when the paste would run more than one command.

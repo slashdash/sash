@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! macOS screen geometry and panel placement. AppKit supplies the menu-bar inset,
 //! which is part of the panel's height now that it covers the menu bar.
 
@@ -273,7 +276,12 @@ mod tests {
     use super::*;
 
     fn at(id: u32, x_pt: f64, y_pt: f64) -> Screen {
-        Screen { id, x_pt, y_pt, ..Screen::default() }
+        Screen {
+            id,
+            x_pt,
+            y_pt,
+            ..Screen::default()
+        }
     }
 
     #[test]
@@ -293,6 +301,9 @@ mod tests {
         ]);
         let names: Vec<&str> = list.iter().map(|display| display.name.as_str()).collect();
         assert_eq!(names, ["built-in", "left", "external"]);
-        assert_eq!(list.iter().map(|display| display.index).collect::<Vec<_>>(), [1, 2, 3]);
+        assert_eq!(
+            list.iter().map(|display| display.index).collect::<Vec<_>>(),
+            [1, 2, 3]
+        );
     }
 }

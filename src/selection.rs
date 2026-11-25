@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! Mouse selection over the terminal grid: drag, word, line, and copy text.
 
 use crate::term::Grid;

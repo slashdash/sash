@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! Pty plumbing: spawn a shell in a real pty and stream its output into the app thread.
 
 use std::io::{Read, Write};
@@ -21,7 +24,13 @@ pub struct Pty {
 }
 
 impl Pty {
-    pub fn spawn_shell(cols: u16, rows: u16, cell_w: u32, cell_h: u32, waker: Waker) -> Result<Self> {
+    pub fn spawn_shell(
+        cols: u16,
+        rows: u16,
+        cell_w: u32,
+        cell_h: u32,
+        waker: Waker,
+    ) -> Result<Self> {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
         let mut command = CommandBuilder::new(&shell);
         command.arg("-l");
@@ -83,7 +92,14 @@ impl Pty {
             })
             .context("spawn pty reader thread")?;
 
-        Ok(Self { master: pair.master, writer, child, rx, eof: false, shell: label })
+        Ok(Self {
+            master: pair.master,
+            writer,
+            child,
+            rx,
+            eof: false,
+            shell: label,
+        })
     }
 
     /// Every chunk read since the last call, concatenated.

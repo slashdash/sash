@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! User configuration, loaded from `~/.config/sash/config.json`.
 
 use std::path::{Path, PathBuf};
@@ -319,7 +322,10 @@ mod tests {
 
     #[test]
     fn a_pinned_display_round_trips_and_zero_means_follow_the_pointer() {
-        let config = Config { display: Some(2), ..Config::default() };
+        let config = Config {
+            display: Some(2),
+            ..Config::default()
+        };
         let text = serde_json::to_string(&config).unwrap();
         let back: Config = serde_json::from_str(&text).unwrap();
         assert_eq!(back.display, Some(2));
@@ -407,10 +413,8 @@ mod tests {
 
     #[test]
     fn a_height_chosen_in_settings_is_not_migrated_again() {
-        let config = Config::parse(
-            r#"{"height":420.0,"always_on_top":true,"focus_on_open":true}"#,
-        )
-        .unwrap();
+        let config =
+            Config::parse(r#"{"height":420.0,"always_on_top":true,"focus_on_open":true}"#).unwrap();
         assert_eq!(config.height, Some(420.0));
     }
 
@@ -468,7 +472,12 @@ mod tests {
                     color: Some(3),
                     pinned: true,
                 },
-                SessionTab { cwd: None, name: None, color: None, pinned: false },
+                SessionTab {
+                    cwd: None,
+                    name: None,
+                    color: None,
+                    pinned: false,
+                },
             ],
             active: 1,
         };

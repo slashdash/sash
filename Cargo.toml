@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2024"
 description = "A Quake-style drop-down terminal for macOS, built with Rune and libghostty-vt"
 license = "MIT"
+repository = "https://github.com/slashdash/sash"
+homepage = "https://github.com/slashdash/sash"
+readme = "README.md"
+rust-version = "1.85"
+keywords = ["terminal", "quake", "dropdown", "macos", "ghostty"]
+categories = ["command-line-interface", "gui"]
 
 [dependencies]
 rune = { git = "https://github.com/anomalyco/rune", rev = "b5c4fa685ec3d187db2be10b35833614784ee9b0" }

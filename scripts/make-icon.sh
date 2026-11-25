@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Sash contributors
+# SPDX-License-Identifier: MIT
+
 # Render the source SVG and pack it as a macOS .icns.
 set -euo pipefail
 

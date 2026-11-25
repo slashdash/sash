@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! End-to-end terminal tests: libghostty-vt parsing, a real pty in both directions,
 //! and key encoding into pty bytes.
 
@@ -48,7 +51,11 @@ fn vt_parses_text_and_styles() {
     vt.refresh(true);
     assert_eq!(row_text(&vt, 0), "hello bold world");
     let b = vt.grid().cell(6, 0).unwrap();
-    assert!(b.flags & FLAG_BOLD != 0, "bold flag expected, got {}", b.flags);
+    assert!(
+        b.flags & FLAG_BOLD != 0,
+        "bold flag expected, got {}",
+        b.flags
+    );
     assert_eq!(row_text(&vt, 1), "second");
 }
 
@@ -66,7 +73,12 @@ fn pty_output_reaches_the_grid() {
     cmd.args(["-c", r"printf 'pty says \033[32mhi\033[0m\r\n'"]);
     let mut pty = Pty::spawn(cmd, 40, 6, 8, 16, "test".into(), Arc::new(|| {})).unwrap();
     let mut vt = Vt::new(40, 6, 8, 16);
-    assert!(wait_for(&mut vt, &mut pty, |vt| row_text(vt, 0).contains("pty says hi")), "row: {:?}", row_text(&vt, 0));
+    assert!(
+        wait_for(&mut vt, &mut pty, |vt| row_text(vt, 0)
+            .contains("pty says hi")),
+        "row: {:?}",
+        row_text(&vt, 0)
+    );
 }
 
 #[test]
@@ -88,19 +100,37 @@ fn keys_encode_to_pty_bytes() {
     use rune::{Key, KeyEvent, Mods};
     let mut vt = Vt::new(20, 5, 8, 16);
 
-    let e = KeyEvent { key: Key::Text("a".into()), mods: Mods::default() };
+    let e = KeyEvent {
+        key: Key::Text("a".into()),
+        mods: Mods::default(),
+    };
     assert_eq!(vt.encode_key(&e), b"a");
 
-    let e = KeyEvent { key: Key::Text("c".into()), mods: Mods { ctrl: true, ..Default::default() } };
+    let e = KeyEvent {
+        key: Key::Text("c".into()),
+        mods: Mods {
+            ctrl: true,
+            ..Default::default()
+        },
+    };
     assert_eq!(vt.encode_key(&e), b"\x03");
 
-    let e = KeyEvent { key: Key::Enter, mods: Mods::default() };
+    let e = KeyEvent {
+        key: Key::Enter,
+        mods: Mods::default(),
+    };
     assert_eq!(vt.encode_key(&e), b"\r");
 
-    let e = KeyEvent { key: Key::Up, mods: Mods::default() };
+    let e = KeyEvent {
+        key: Key::Up,
+        mods: Mods::default(),
+    };
     assert_eq!(vt.encode_key(&e), b"\x1b[A");
 
-    let e = KeyEvent { key: Key::Tab, mods: Mods::default() };
+    let e = KeyEvent {
+        key: Key::Tab,
+        mods: Mods::default(),
+    };
     assert_eq!(vt.encode_key(&e), b"\t");
 }
 
@@ -171,13 +201,22 @@ fn scrollback_keeps_history_and_scrolls_both_ways() {
     }
     vt.refresh(true);
     let bottom = vt.scrollbar().expect("scrollbar geometry");
-    assert!(bottom.total > bottom.len, "history should be scrollable: {bottom:?}");
+    assert!(
+        bottom.total > bottom.len,
+        "history should be scrollable: {bottom:?}"
+    );
     assert!(vt.viewport_active());
 
     vt.scroll(-10); // negative is up, libghostty-vt's sign
     let scrolled = vt.scrollbar().unwrap();
-    assert!(!vt.viewport_active(), "scrolling up should leave the live viewport");
-    assert!(scrolled.offset < bottom.offset, "offset should move toward history: {scrolled:?} vs {bottom:?}");
+    assert!(
+        !vt.viewport_active(),
+        "scrolling up should leave the live viewport"
+    );
+    assert!(
+        scrolled.offset < bottom.offset,
+        "offset should move toward history: {scrolled:?} vs {bottom:?}"
+    );
 
     vt.scroll_to_bottom();
     assert!(vt.viewport_active());
@@ -214,12 +253,18 @@ fn progress_and_desktop_notifications_come_from_osc() {
     vt.write(b"\x1b]9;4;1;42\x07");
     assert_eq!(
         vt.progress(),
-        Some(Progress { state: ProgressState::Determinate, percent: Some(42) })
+        Some(Progress {
+            state: ProgressState::Determinate,
+            percent: Some(42)
+        })
     );
     vt.write(b"\x1b]9;4;2;80\x07");
     assert_eq!(
         vt.progress(),
-        Some(Progress { state: ProgressState::Error, percent: Some(80) })
+        Some(Progress {
+            state: ProgressState::Error,
+            percent: Some(80)
+        })
     );
     vt.write(b"\x1b]9;4;0\x07");
     assert_eq!(vt.progress(), None);
@@ -305,8 +350,8 @@ fn a_bell_is_reported_once() {
 
 #[test]
 fn pty_output_wakes_the_app() {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use sash::term::pty::Waker;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     // The reader thread must wake the UI thread itself; otherwise shell output
     // is only drained on the next keystroke or idle tick, which made typed
@@ -325,6 +370,9 @@ fn pty_output_wakes_the_app() {
     while Instant::now() < deadline && hits.load(Ordering::SeqCst) == 0 {
         std::thread::sleep(Duration::from_millis(5));
     }
-    assert!(hits.load(Ordering::SeqCst) > 0, "the pty reader never woke the app");
+    assert!(
+        hits.load(Ordering::SeqCst) > 0,
+        "the pty reader never woke the app"
+    );
     drop(pty);
 }

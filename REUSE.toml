@@ -1,0 +1,27 @@
+version = 1
+
+SPDX-PackageName = "sash"
+SPDX-PackageSupplier = "Organization: Sash contributors"
+SPDX-PackageDownloadLocation = "https://github.com/slashdash/sash"
+
+# Source files carry their own SPDX headers; these are the files that cannot
+# hold a comment (images, JSON, generated lockfile) or are pure prose.
+[[annotations]]
+path = [
+    "assets/**",
+    "demo/**",
+    "docs/**",
+    "scripts/*.json",
+    "*.md",
+    "Cargo.toml",
+    "Cargo.lock",
+    ".github/**",
+    "about.toml",
+    "about.hbs",
+    "THIRD-PARTY.html",
+    ".gitignore",
+    "REUSE.toml",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Sash contributors"
+SPDX-License-Identifier = "MIT"

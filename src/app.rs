@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! App state, the view, key routing and background pumping.
 
 use std::path::{Path, PathBuf};
@@ -134,7 +137,15 @@ impl Pane {
             builder.cwd(dir);
         }
 
-        match Pty::spawn(builder, metrics.cols, metrics.rows, cell_w, cell_h, "pane".into(), waker.clone()) {
+        match Pty::spawn(
+            builder,
+            metrics.cols,
+            metrics.rows,
+            cell_w,
+            cell_h,
+            "pane".into(),
+            waker.clone(),
+        ) {
             Ok(pty) => Self {
                 vt,
                 pty: Some(pty),
@@ -184,7 +195,11 @@ impl Pane {
 
     pub fn title(&self) -> String {
         let t = self.vt.title().trim();
-        let t = if t.is_empty() { self.last_title.as_str() } else { t };
+        let t = if t.is_empty() {
+            self.last_title.as_str()
+        } else {
+            t
+        };
         if t.is_empty() {
             self.fallback_title.clone()
         } else {
@@ -223,7 +238,10 @@ fn directory_title(title: &str) -> Option<String> {
     if let Some(rest) = title.strip_prefix("~/") {
         return path_title(Path::new(rest));
     }
-    title.starts_with('/').then(|| path_title(Path::new(title))).flatten()
+    title
+        .starts_with('/')
+        .then(|| path_title(Path::new(title)))
+        .flatten()
 }
 
 fn tab_strip_visible(tab_count: usize, any_pinned: bool) -> bool {
@@ -240,7 +258,10 @@ fn calculate_tab_widths(
     fill: bool,
 ) -> Vec<f32> {
     if !fill {
-        return natural.iter().map(|width| width.max(TAB_MIN_WIDTH)).collect();
+        return natural
+            .iter()
+            .map(|width| width.max(TAB_MIN_WIDTH))
+            .collect();
     }
     if natural.is_empty() {
         return Vec::new();
@@ -330,7 +351,10 @@ impl Tab {
 
     /// The longest-running bell among the panes, for the tab chip and frame pump.
     pub fn bell_until(&self) -> f64 {
-        self.panes.iter().map(|pane| pane.bell_until).fold(0.0, f64::max)
+        self.panes
+            .iter()
+            .map(|pane| pane.bell_until)
+            .fold(0.0, f64::max)
     }
 }
 
@@ -504,7 +528,11 @@ pub struct Palette {
 
 impl Palette {
     fn new() -> Self {
-        Self { open: false, edit: TextEdit::new(String::new()), selected: 0 }
+        Self {
+            open: false,
+            edit: TextEdit::new(String::new()),
+            selected: 0,
+        }
     }
 }
 
@@ -567,7 +595,13 @@ pub struct Anim {
 }
 
 impl Sash {
-    pub fn new(cfg: Config, screen: Screen, handle: AppHandle<Sash>, width: f32, height: f32) -> Self {
+    pub fn new(
+        cfg: Config,
+        screen: Screen,
+        handle: AppHandle<Sash>,
+        width: f32,
+        height: f32,
+    ) -> Self {
         let demo = std::env::var_os("SASH_DEMO").is_some();
         let settings_open = std::env::var_os("SASH_SETTINGS").is_some();
         // Dev and demo hook: open the paste confirmation on a given text.
@@ -583,7 +617,11 @@ impl Sash {
         // A Finder launch has no window and no Dock icon, so the first run shows
         // the panel itself instead of looking like nothing happened.
         let welcome = !cfg.welcome_seen && !demo && sash_command().is_none();
-        let session = if restoring { Session::load() } else { Session::default() };
+        let session = if restoring {
+            Session::load()
+        } else {
+            Session::default()
+        };
         let mut tabs: Vec<Tab> = session
             .tabs
             .iter()
@@ -591,7 +629,9 @@ impl Sash {
             .map(|tab| {
                 let mut pane = Tab::new(&cfg, screen, metrics, demo, &waker, tab.cwd.clone());
                 pane.display_name = tab.name.clone();
-                pane.color = tab.color.filter(|color| (*color as usize) < TAB_COLORS.len());
+                pane.color = tab
+                    .color
+                    .filter(|color| (*color as usize) < TAB_COLORS.len());
                 pane.pinned = tab.pinned;
                 pane
             })
@@ -622,13 +662,14 @@ impl Sash {
             height,
             demo,
             refined: false,
-            want_show: settings_open
-                || welcome
-                || std::env::var_os("SASH_SHOW").is_some(),
+            want_show: settings_open || welcome || std::env::var_os("SASH_SHOW").is_some(),
             want_place: false,
             pending_reveal: false,
             waker,
-            settings: SettingsPane { open: settings_open, ..Default::default() },
+            settings: SettingsPane {
+                open: settings_open,
+                ..Default::default()
+            },
             hotkey_id: None,
             hotkey_failed: false,
             hotkey_error: None,
@@ -680,7 +721,9 @@ impl Sash {
     /// Give the keyboard to one pane of the active tab. Selection, find and
     /// preedit belong to the focused pane, so they start clean.
     pub fn focus_pane(&mut self, index: usize) {
-        let Some(tab) = self.tabs.get(self.active) else { return };
+        let Some(tab) = self.tabs.get(self.active) else {
+            return;
+        };
         if index >= tab.panes.len() || index == tab.focus {
             return;
         }
@@ -689,7 +732,9 @@ impl Sash {
         self.preedit = None;
         self.wheel.reset();
         self.mouse_down = false;
-        let Some(tab) = self.tabs.get_mut(self.active) else { return };
+        let Some(tab) = self.tabs.get_mut(self.active) else {
+            return;
+        };
         tab.focus = index;
         tab.unread = false;
         self.metrics = Some(tab.focused().metrics);
@@ -709,7 +754,9 @@ impl Sash {
         self.close_find();
         let pane = Pane::new(&self.cfg, self.screen, metrics, self.demo, &self.waker, cwd);
         let active = self.active;
-        let Some(tab) = self.tabs.get_mut(active) else { return };
+        let Some(tab) = self.tabs.get_mut(active) else {
+            return;
+        };
         let index = tab.panes.len();
         if !tab.tree.split(tab.focus, index, dir) {
             return;
@@ -725,7 +772,9 @@ impl Sash {
 
     /// Close one pane; the tab goes with its last pane.
     pub fn close_pane(&mut self, tab_index: usize, pane_index: usize) {
-        let Some(tab) = self.tabs.get(tab_index) else { return };
+        let Some(tab) = self.tabs.get(tab_index) else {
+            return;
+        };
         if pane_index >= tab.panes.len() {
             return;
         }
@@ -736,7 +785,9 @@ impl Sash {
         if tab_index == self.active && pane_index == tab.focus {
             self.close_find();
         }
-        let Some(tab) = self.tabs.get_mut(tab_index) else { return };
+        let Some(tab) = self.tabs.get_mut(tab_index) else {
+            return;
+        };
         let next = tab.tree.focus_next(pane_index, true);
         let next_after = if next > pane_index { next - 1 } else { next };
         let old_focus = tab.focus;
@@ -762,14 +813,19 @@ impl Sash {
     }
 
     pub fn request_close_pane(&mut self, tab_index: usize, pane_index: usize) {
-        let Some(tab) = self.tabs.get(tab_index) else { return };
+        let Some(tab) = self.tabs.get(tab_index) else {
+            return;
+        };
         if tab.panes.len() == 1 {
             self.request_close_tab(tab_index);
             return;
         }
         let busy = tab.panes.get(pane_index).is_some_and(Pane::busy);
         if busy && self.cfg.confirm_close {
-            self.pending_close = Some(CloseTarget::Pane { tab: tab_index, pane: pane_index });
+            self.pending_close = Some(CloseTarget::Pane {
+                tab: tab_index,
+                pane: pane_index,
+            });
             self.pending_quit = false;
             return;
         }
@@ -805,9 +861,9 @@ impl Sash {
             .enumerate()
             .map(|(index, tab)| {
                 let weight = if index == self.active { 500.0 } else { 400.0 };
-                let active_dot = index == self.active && self.cfg.tab_highlight == TabHighlight::Dot;
-                18.0
-                    + if tab.color.is_some() { 14.0 } else { 0.0 }
+                let active_dot =
+                    index == self.active && self.cfg.tab_highlight == TabHighlight::Dot;
+                18.0 + if tab.color.is_some() { 14.0 } else { 0.0 }
                     + if tab.unread { 14.0 } else { 0.0 }
                     + if active_dot { 13.0 } else { 0.0 }
                     + rune::text::advance(&tab.title(), self.small_style(weight, 12.0))
@@ -815,7 +871,10 @@ impl Sash {
                     + 15.0
             })
             .collect::<Vec<_>>();
-        let hotkey = rune::text::advance(&pretty_hotkey(&self.cfg.hotkey), self.small_style(400.0, 11.0));
+        let hotkey = rune::text::advance(
+            &pretty_hotkey(&self.cfg.hotkey),
+            self.small_style(400.0, 11.0),
+        );
         calculate_tab_widths(self.width, hotkey, &natural, self.cfg.tabs_fill_width)
     }
 
@@ -846,7 +905,10 @@ impl Sash {
         if col >= m.cols as u32 || row >= m.rows as u32 {
             return None;
         }
-        Some(CellPos { x: col as u16, y: row as u16 })
+        Some(CellPos {
+            x: col as u16,
+            y: row as u16,
+        })
     }
 
     /// Pass one pointer event to the running program, in the terminal's pixel
@@ -910,7 +972,12 @@ impl Sash {
         }
         let cw = (advance / 10.0 * 64.0).round() / 64.0;
         let ch = (self.cfg.font_size * 1.32).round().max(10.0);
-        self.metrics = Some(Metrics { cw, ch, cols: 0, rows: 0 });
+        self.metrics = Some(Metrics {
+            cw,
+            ch,
+            cols: 0,
+            rows: 0,
+        });
         self.relayout();
         true
     }
@@ -938,7 +1005,9 @@ impl Sash {
         let screen = self.screen;
         for tab in &mut self.tabs {
             for (index, rect) in tab.tree.layout(area, GAP) {
-                let Some(pane) = tab.panes.get_mut(index) else { continue };
+                let Some(pane) = tab.panes.get_mut(index) else {
+                    continue;
+                };
                 pane.rect = rect;
                 let cols = (((rect.w - PAD_X * 2.0).max(cw)) / cw).floor() as u16;
                 let rows = (((rect.h - PAD_Y * 2.0).max(ch)) / ch).floor() as u16;
@@ -1085,7 +1154,10 @@ impl Sash {
         let built = Shortcut::from_physical_key(code, ev.mods)
             .and_then(|shortcut| shortcut.require_modifier().map(|_| shortcut));
         match built {
-            Ok(shortcut) => match self.handle.register_shortcut(shortcut.clone(), hotkey_toggle) {
+            Ok(shortcut) => match self
+                .handle
+                .register_shortcut(shortcut.clone(), hotkey_toggle)
+            {
                 Ok(id) => {
                     self.hotkey_id = Some(id);
                     self.cfg.hotkey = shortcut.to_string();
@@ -1582,7 +1654,14 @@ impl Sash {
         }
         if self.tabs.is_empty() {
             let metrics = self.metrics();
-            self.tabs.push(Tab::new(&self.cfg, self.screen, metrics, self.demo, &self.waker, None));
+            self.tabs.push(Tab::new(
+                &self.cfg,
+                self.screen,
+                metrics,
+                self.demo,
+                &self.waker,
+                None,
+            ));
             self.active = 0;
         }
         self.want_place = true;
@@ -1648,12 +1727,20 @@ impl Sash {
             }
             return;
         }
-        self.anim = Some(Anim { from: self.reveal, to, start: None, duration, hide_after });
+        self.anim = Some(Anim {
+            from: self.reveal,
+            to,
+            start: None,
+            duration,
+            hide_after,
+        });
     }
 
     /// Advance the slide; returns true while the panel is moving.
     pub fn tick_animation(&mut self) -> bool {
-        let Some(mut anim) = self.anim else { return false };
+        let Some(mut anim) = self.anim else {
+            return false;
+        };
         let Some(start) = anim.start else {
             anim.start = Some(self.now);
             self.anim = Some(anim);
@@ -1841,10 +1928,7 @@ impl Sash {
         let Some(tab) = self.tabs.get(index) else {
             return;
         };
-        let current = tab
-            .display_name
-            .clone()
-            .unwrap_or_else(|| tab.title());
+        let current = tab.display_name.clone().unwrap_or_else(|| tab.title());
         self.tab_menu = None;
         self.close_find();
         self.preedit = None;
@@ -2014,7 +2098,9 @@ impl Sash {
         }
         let mut seen = Vec::new();
         for tab in &self.tabs {
-            let Some(dir) = tab.current_dir() else { continue };
+            let Some(dir) = tab.current_dir() else {
+                continue;
+            };
             if seen.contains(&dir) {
                 continue;
             }
@@ -2125,7 +2211,10 @@ impl Sash {
         if (self.settings.open && (self.shell_edit.focused || self.font_edit.focused))
             || (self.find.open && self.find.edit.focused)
             || (self.palette.open && self.palette.edit.focused)
-            || self.rename.as_ref().is_some_and(|rename| rename.edit.focused)
+            || self
+                .rename
+                .as_ref()
+                .is_some_and(|rename| rename.edit.focused)
         {
             return false;
         }
@@ -2210,13 +2299,15 @@ impl Sash {
                 }
                 if let Some(end) = pane.vt.take_command_end() {
                     changed = true;
-                    let focused = self.focused
-                        && active_tab
-                        && pane_index == tab.focus;
+                    let focused = self.focused && active_tab && pane_index == tab.focus;
                     if !focused {
                         let failed =
                             end.exit.is_some_and(|code| code != 0) || !end.error.is_empty();
-                        let title = if failed { "Command failed" } else { "Command finished" };
+                        let title = if failed {
+                            "Command failed"
+                        } else {
+                            "Command finished"
+                        };
                         let mut body = pane.title();
                         if !end.command.trim().is_empty() {
                             body = format!("{} · {}", body, end.command.trim());
@@ -2297,7 +2388,10 @@ impl Sash {
             return;
         }
         let mut selection = Selection::new(CellPos { x: 0, y: 0 }, Kind::Cells);
-        selection.extend(CellPos { x: grid.cols - 1, y: grid.rows - 1 });
+        selection.extend(CellPos {
+            x: grid.cols - 1,
+            y: grid.rows - 1,
+        });
         self.selection = Some(selection);
     }
 
@@ -2576,7 +2670,6 @@ impl Sash {
     }
 }
 
-
 /// A file target typed into the palette: `path`, `path:line` or `path:line:col`.
 /// Only an existing file becomes an item, so ordinary searches are unaffected.
 fn palette_target(query: &str) -> Option<(PathBuf, Option<u32>)> {
@@ -2643,7 +2736,10 @@ fn open_in_editor(path: &Path, line: Option<u32>) {
             }
         }
     }
-    if let Ok(mut child) = std::process::Command::new("/usr/bin/open").arg(path).spawn() {
+    if let Ok(mut child) = std::process::Command::new("/usr/bin/open")
+        .arg(path)
+        .spawn()
+    {
         std::thread::spawn(move || {
             let _ = child.wait();
         });
@@ -2678,7 +2774,11 @@ fn notify(title: &str, body: &str) {
     if title.is_empty() && body.is_empty() {
         return;
     }
-    let title = if title.is_empty() { "sash".to_string() } else { title };
+    let title = if title.is_empty() {
+        "sash".to_string()
+    } else {
+        title
+    };
     let spawned = std::process::Command::new("/usr/bin/osascript")
         .args([
             "-e",
@@ -2768,9 +2868,18 @@ fn truncate(s: &str, max: usize) -> String {
 pub fn srgb(c: Rgb, a: f32) -> Color {
     let lin = |v: u8| {
         let s = v as f32 / 255.0;
-        if s <= 0.04045 { s / 12.92 } else { ((s + 0.055) / 1.055).powf(2.4) }
+        if s <= 0.04045 {
+            s / 12.92
+        } else {
+            ((s + 0.055) / 1.055).powf(2.4)
+        }
     };
-    Color { r: lin(c.r), g: lin(c.g), b: lin(c.b), a }
+    Color {
+        r: lin(c.r),
+        g: lin(c.g),
+        b: lin(c.b),
+        a,
+    }
 }
 
 pub fn pretty_hotkey(chord: &str) -> String {
@@ -2834,7 +2943,11 @@ pub fn view(s: &Sash, _cx: &mut Cx<Sash>) -> El {
     if bar && !s.cfg.tabs_at_bottom {
         card = card.child(tab_bar(s));
     }
-    card = card.child(if s.settings.open { settings_page(s) } else { terminal(s) });
+    card = card.child(if s.settings.open {
+        settings_page(s)
+    } else {
+        terminal(s)
+    });
     if bar && s.cfg.tabs_at_bottom {
         card = card.child(tab_bar(s));
     }
@@ -2866,11 +2979,9 @@ pub fn view(s: &Sash, _cx: &mut Cx<Sash>) -> El {
     el().w_full().h_full().child(clip)
 }
 
-
 /// A five-point grab strip on the panel's bottom edge, in the padding below the grid.
 fn resize_handle(s: &Sash) -> El {
-    el()
-        .key("resize-handle")
+    el().key("resize-handle")
         .absolute(0.0, s.height - 5.0)
         .w_full()
         .h(5.0)
@@ -2931,7 +3042,11 @@ fn tab_bar(s: &Sash) -> El {
             .fill(fill)
             .on_secondary_press(move |s: &mut Sash, p, _tx| {
                 s.select(i);
-                s.tab_menu = Some(TabMenu { tab: i, x: p.x, y: p.y });
+                s.tab_menu = Some(TabMenu {
+                    tab: i,
+                    x: p.x,
+                    y: p.y,
+                });
             })
             .on_drag(move |s: &mut Sash, d: &mut Drag, _tx: &mut Tx| {
                 if d.phase == Phase::Down {
@@ -2941,7 +3056,11 @@ fn tab_bar(s: &Sash) -> El {
                 // Drop on whatever tab is under the pointer.
                 if d.phase == Phase::Up && d.clicks == 1 && d.dx.abs() > 6.0 {
                     let point = d.window_point();
-                    let bar_top = if s.cfg.tabs_at_bottom { s.height - TAB_H } else { 0.0 };
+                    let bar_top = if s.cfg.tabs_at_bottom {
+                        s.height - TAB_H
+                    } else {
+                        0.0
+                    };
                     if point[1] >= bar_top
                         && point[1] <= bar_top + TAB_H
                         && let Some(to) = s.tab_at_x(point[0])
@@ -2952,8 +3071,7 @@ fn tab_bar(s: &Sash) -> El {
             });
         if active && s.cfg.tab_highlight == TabHighlight::Dot {
             chip = chip.child(
-                el()
-                    .key(format!("active-dot-{i}"))
+                el().key(format!("active-dot-{i}"))
                     .size(6.0, 6.0)
                     .radius(3.0)
                     .fill(accent),
@@ -2961,8 +3079,7 @@ fn tab_bar(s: &Sash) -> El {
         }
         if let Some(color) = tab.color.and_then(tab_color) {
             chip = chip.child(
-                el()
-                    .key(format!("color-{i}"))
+                el().key(format!("color-{i}"))
                     .size(7.0, 7.0)
                     .radius(3.5)
                     .fill(color),
@@ -2973,8 +3090,7 @@ fn tab_bar(s: &Sash) -> El {
             // that marks the active tab.
             let error = matches!(tab.progress(), Some(p) if p.state == ProgressState::Error);
             chip = chip.child(
-                el()
-                    .key(format!("dot-{i}"))
+                el().key(format!("dot-{i}"))
                     .size(7.0, 7.0)
                     .radius(3.5)
                     .border(1.2, if error { srgb(ERROR, 1.0) } else { accent }),
@@ -2997,8 +3113,7 @@ fn tab_bar(s: &Sash) -> El {
         );
         chip = if tab.pinned {
             chip.child(
-                el()
-                    .key(format!("pin-{i}"))
+                el().key(format!("pin-{i}"))
                     .size(15.0, 15.0)
                     .radius(4.0)
                     .center()
@@ -3007,19 +3122,21 @@ fn tab_bar(s: &Sash) -> El {
             )
         } else {
             chip.child(
-                el()
-                    .key(format!("close-{i}"))
+                el().key(format!("close-{i}"))
                     .size(15.0, 15.0)
                     .radius(4.0)
                     .center()
                     .on_press(move |s: &mut Sash| s.request_close_tab(i))
-                    .child(text("×").font(s.small_style(400.0, 12.0)).color(t.text_secondary)),
+                    .child(
+                        text("×")
+                            .font(s.small_style(400.0, 12.0))
+                            .color(t.text_secondary),
+                    ),
             )
         };
         if active && s.cfg.tab_highlight == TabHighlight::Underline {
             chip = chip.child(
-                el()
-                    .key(format!("active-underline-{i}"))
+                el().key(format!("active-underline-{i}"))
                     .absolute(9.0, 22.0)
                     .w((widths[i] - 18.0).max(0.0))
                     .h(2.0)
@@ -3032,7 +3149,11 @@ fn tab_bar(s: &Sash) -> El {
     }
 
     if let Some(progress) = s.tabs.get(s.active).and_then(|tab| tab.progress()) {
-        let fraction = progress.percent.map(|p| p as f32 / 100.0).unwrap_or(0.35).clamp(0.05, 1.0);
+        let fraction = progress
+            .percent
+            .map(|p| p as f32 / 100.0)
+            .unwrap_or(0.35)
+            .clamp(0.05, 1.0);
         let color = match progress.state {
             ProgressState::Error => srgb(ERROR, 1.0),
             ProgressState::Paused => accent.alpha(0.55),
@@ -3040,9 +3161,15 @@ fn tab_bar(s: &Sash) -> El {
         };
         let width = ((s.width - PAD_X * 2.0) * fraction).max(6.0);
         bar = bar.child(
-            el()
-                .key("tab-progress")
-                .absolute(0.0, if s.cfg.tabs_at_bottom { 0.0 } else { TAB_H - 2.0 })
+            el().key("tab-progress")
+                .absolute(
+                    0.0,
+                    if s.cfg.tabs_at_bottom {
+                        0.0
+                    } else {
+                        TAB_H - 2.0
+                    },
+                )
                 .w(width)
                 .h(2.0)
                 .radius(1.0)
@@ -3057,29 +3184,41 @@ fn tab_bar(s: &Sash) -> El {
         .radius(7.0)
         .center()
         .on_press(|s: &mut Sash| s.new_tab())
-        .child(text("+").font(s.small_style(500.0, 15.0)).color(t.text_secondary));
+        .child(
+            text("+")
+                .font(s.small_style(500.0, 15.0))
+                .color(t.text_secondary),
+        );
 
     let settings = el()
         .key("settings")
         .size(25.0, 25.0)
         .radius(7.0)
         .center()
-        .fill(if s.settings.open { Color::WHITE.alpha(0.085) } else { Color::TRANSPARENT })
+        .fill(if s.settings.open {
+            Color::WHITE.alpha(0.085)
+        } else {
+            Color::TRANSPARENT
+        })
         .on_press(|s: &mut Sash| s.toggle_settings())
-        .child(text("⚙").font(s.small_style(400.0, 13.0)).color(t.text_secondary));
-
-    bar.child(plus)
-        .child(spacer())
-        .child(settings)
         .child(
-            text(pretty_hotkey(&s.cfg.hotkey))
-                .font(s.small_style(400.0, 11.0))
-                .color(t.text_secondary.alpha(0.55)),
-        )
+            text("⚙")
+                .font(s.small_style(400.0, 13.0))
+                .color(t.text_secondary),
+        );
+
+    bar.child(plus).child(spacer()).child(settings).child(
+        text(pretty_hotkey(&s.cfg.hotkey))
+            .font(s.small_style(400.0, 11.0))
+            .color(t.text_secondary.alpha(0.55)),
+    )
 }
 
 fn tab_color(index: u8) -> Option<Color> {
-    TAB_COLORS.get(index as usize).copied().map(|color| srgb(color, 1.0))
+    TAB_COLORS
+        .get(index as usize)
+        .copied()
+        .map(|color| srgb(color, 1.0))
 }
 
 /// A small pushpin: head, shaft, base.
@@ -3119,7 +3258,12 @@ fn settings_page(s: &Sash) -> El {
         .radius(10.0)
         .fill(Color::WHITE.alpha(0.035))
         .border(1.0, hair)
-        .child(setting_row(s, "set-height", "Drop-down height", height_control(s, current)))
+        .child(setting_row(
+            s,
+            "set-height",
+            "Drop-down height",
+            height_control(s, current),
+        ))
         .child(separator("sep-height", hair))
         .child(setting_row(
             s,
@@ -3193,7 +3337,12 @@ fn settings_page(s: &Sash) -> El {
             flip_hide_on_escape,
         ))
         .child(separator("sep-escape", hair))
-        .child(setting_row(s, "set-hotkey", "Drop-down shortcut", shortcut_control(s)));
+        .child(setting_row(
+            s,
+            "set-hotkey",
+            "Drop-down shortcut",
+            shortcut_control(s),
+        ));
 
     let terminal_card = col()
         .key("settings-terminal-card")
@@ -3374,7 +3523,10 @@ fn settings_page(s: &Sash) -> El {
         note = Some("Press a combination with ⌘, ⌃ or ⌥. Esc cancels.".into());
     }
     if note.is_none() {
-        note = s.hotkey_error.as_ref().map(|e| format!("Shortcut unavailable: {e}"));
+        note = s
+            .hotkey_error
+            .as_ref()
+            .map(|e| format!("Shortcut unavailable: {e}"));
     }
     if note.is_none() {
         note = Some("Full fills the screen above the Dock · changes save immediately".into());
@@ -3400,7 +3552,12 @@ fn settings_page(s: &Sash) -> El {
             .color(note_color),
     );
 
-    let mut tabs = row().key("settings-tabs").w_full().h(26.0).gap(3.0).center_y();
+    let mut tabs = row()
+        .key("settings-tabs")
+        .w_full()
+        .h(26.0)
+        .gap(3.0)
+        .center_y();
     for tab in SettingsTab::ALL {
         tabs = tabs.child(settings_tab_button(s, tab));
     }
@@ -3428,7 +3585,11 @@ fn settings_page(s: &Sash) -> El {
                         .h(26.0)
                         .center_y()
                         .gap(8.0)
-                        .child(text("Settings").font(s.small_style(600.0, 15.0)).color(t.text))
+                        .child(
+                            text("Settings")
+                                .font(s.small_style(600.0, 15.0))
+                                .color(t.text),
+                        )
                         .child(spacer())
                         .child(
                             text(crate::version_label())
@@ -3436,19 +3597,14 @@ fn settings_page(s: &Sash) -> El {
                                 .color(t.text_secondary.alpha(0.45)),
                         )
                         .child(
-                            el()
-                                .key("done")
+                            el().key("done")
                                 .h(24.0)
                                 .px(9.0)
                                 .radius(6.0)
                                 .center()
                                 .fill(Color::WHITE.alpha(0.07))
                                 .on_press(|s: &mut Sash| s.close_settings())
-                                .child(
-                                    text("Done")
-                                        .font(s.small_style(500.0, 12.0))
-                                        .color(t.text),
-                                ),
+                                .child(text("Done").font(s.small_style(500.0, 12.0)).color(t.text)),
                         ),
                 )
                 .child(tabs)
@@ -3458,7 +3614,9 @@ fn settings_page(s: &Sash) -> El {
                         .w_full()
                         .grow(1.0)
                         .min_h(0.0)
-                        .scroll(ScrollSpec { stick_bottom: false })
+                        .scroll(ScrollSpec {
+                            stick_bottom: false,
+                        })
                         .child(cards),
                 ),
         )
@@ -3467,13 +3625,16 @@ fn settings_page(s: &Sash) -> El {
 fn settings_tab_button(s: &Sash, tab: SettingsTab) -> El {
     let t = s.theme();
     let active = s.settings.tab == tab;
-    el()
-        .key(format!("settings-tab-{}", tab.key()))
+    el().key(format!("settings-tab-{}", tab.key()))
         .h(26.0)
         .px(12.0)
         .radius(7.0)
         .center()
-        .fill(if active { Color::WHITE.alpha(0.10) } else { Color::TRANSPARENT })
+        .fill(if active {
+            Color::WHITE.alpha(0.10)
+        } else {
+            Color::TRANSPARENT
+        })
         .on_press(move |s: &mut Sash| s.settings.tab = tab)
         .child(
             text(tab.label())
@@ -3481,7 +3642,6 @@ fn settings_tab_button(s: &Sash, tab: SettingsTab) -> El {
                 .color(if active { t.text } else { t.text_secondary }),
         )
 }
-
 
 fn shortcuts_card(s: &Sash) -> El {
     let t = s.theme();
@@ -3526,11 +3686,7 @@ fn shortcuts_card(s: &Sash) -> El {
                                 .color(t.text_secondary),
                         ),
                     )
-                    .child(
-                        text(*label)
-                            .font(s.small_style(400.0, 11.0))
-                            .color(t.text),
-                    ),
+                    .child(text(*label).font(s.small_style(400.0, 11.0)).color(t.text)),
             );
         }
         col
@@ -3566,7 +3722,11 @@ fn setting_row(s: &Sash, key: &str, label: &str, control: El) -> El {
         .px(14.0)
         .center_y()
         .justify_between()
-        .child(text(label.to_string()).font(s.small_style(400.0, 13.0)).color(t.text))
+        .child(
+            text(label.to_string())
+                .font(s.small_style(400.0, 13.0))
+                .color(t.text),
+        )
         .child(control)
 }
 
@@ -3586,14 +3746,16 @@ fn toggle_row(s: &Sash, key: &str, label: &str, on: bool, flip: fn(&mut Sash)) -
 fn toggle_switch(on: bool) -> El {
     let (w, h, k) = (38.0, 22.0, 18.0);
     let inset = (h - k) / 2.0;
-    el()
-        .key("switch")
+    el().key("switch")
         .size(w, h)
         .radius(h / 2.0)
-        .fill(if on { srgb(ACCENT, 1.0) } else { Color::WHITE.alpha(0.16) })
+        .fill(if on {
+            srgb(ACCENT, 1.0)
+        } else {
+            Color::WHITE.alpha(0.16)
+        })
         .child(
-            el()
-                .key("knob")
+            el().key("knob")
                 .size(k, k)
                 .absolute(if on { w - k - inset } else { inset }, inset)
                 .radius(k / 2.0)
@@ -3612,8 +3774,7 @@ fn display_control(s: &Sash) -> El {
             .map(|display| format!("{n} · {}", display.name))
             .unwrap_or_else(|| format!("Display {n} (unplugged)")),
     };
-    el()
-        .key("display-button")
+    el().key("display-button")
         .role("button")
         .label(format!("Display: {label}"))
         .h(27.0)
@@ -3637,10 +3798,12 @@ fn display_control(s: &Sash) -> El {
 fn tab_highlight_control(s: &Sash) -> El {
     let t = s.theme();
     let label = format!("{}  ›", s.cfg.tab_highlight.label());
-    el()
-        .key("tab-highlight-button")
+    el().key("tab-highlight-button")
         .role("button")
-        .label(format!("Active tab highlight: {}", s.cfg.tab_highlight.label()))
+        .label(format!(
+            "Active tab highlight: {}",
+            s.cfg.tab_highlight.label()
+        ))
         .h(27.0)
         .w(160.0)
         .px(11.0)
@@ -3662,16 +3825,26 @@ fn shortcut_control(s: &Sash) -> El {
     } else {
         pretty_hotkey(&s.cfg.hotkey)
     };
-    el()
-        .key("hotkey-button")
+    el().key("hotkey-button")
         .role("button")
         .h(27.0)
         .px(11.0)
         .radius(6.0)
         .center()
         .focusable(true)
-        .fill(if capturing { accent.alpha(0.22) } else { Color::WHITE.alpha(0.07) })
-        .border(1.0, if capturing { accent } else { Color::WHITE.alpha(0.12) })
+        .fill(if capturing {
+            accent.alpha(0.22)
+        } else {
+            Color::WHITE.alpha(0.07)
+        })
+        .border(
+            1.0,
+            if capturing {
+                accent
+            } else {
+                Color::WHITE.alpha(0.12)
+            },
+        )
         .on_press_tx(|s: &mut Sash, tx| {
             s.begin_capture();
             // The button would otherwise keep focus and swallow Space/Return while
@@ -3702,8 +3875,7 @@ fn height_control(s: &Sash, value: f32) -> El {
         .gap(10.0)
         .center_y()
         .child(
-            el()
-                .key("height-slider")
+            el().key("height-slider")
                 .role("slider")
                 .label("Drop-down height")
                 .range_value(f64::from(value), 0.2, 1.0)
@@ -3736,8 +3908,7 @@ fn height_control(s: &Sash, value: f32) -> El {
                     }
                 })
                 .child(
-                    el()
-                        .key("track")
+                    el().key("track")
                         .size(w, bar)
                         .absolute(0.0, (h - bar) / 2.0)
                         .radius(bar / 2.0)
@@ -3745,8 +3916,7 @@ fn height_control(s: &Sash, value: f32) -> El {
                         .a11y_hidden(),
                 )
                 .child(
-                    el()
-                        .key("fill")
+                    el().key("fill")
                         .size(k / 2.0 + value * travel, bar)
                         .absolute(0.0, (h - bar) / 2.0)
                         .radius(bar / 2.0)
@@ -3754,8 +3924,7 @@ fn height_control(s: &Sash, value: f32) -> El {
                         .a11y_hidden(),
                 )
                 .child(
-                    el()
-                        .key("knob")
+                    el().key("knob")
                         .size(k, k)
                         .absolute(value * travel, (h - k) / 2.0)
                         .radius(k / 2.0)
@@ -3805,8 +3974,7 @@ fn slider_row(
         .gap(10.0)
         .center_y()
         .child(
-            el()
-                .key(format!("{key}-slider"))
+            el().key(format!("{key}-slider"))
                 .role("slider")
                 .label(title)
                 .range_value(f64::from(shown), f64::from(min), f64::from(max))
@@ -3841,8 +4009,7 @@ fn slider_row(
                     }
                 })
                 .child(
-                    el()
-                        .key("track")
+                    el().key("track")
                         .size(w, bar)
                         .absolute(0.0, (h - bar) / 2.0)
                         .radius(bar / 2.0)
@@ -3850,8 +4017,7 @@ fn slider_row(
                         .a11y_hidden(),
                 )
                 .child(
-                    el()
-                        .key("fill")
+                    el().key("fill")
                         .size(k / 2.0 + (shown - min) / (max - min) * travel, bar)
                         .absolute(0.0, (h - bar) / 2.0)
                         .radius(bar / 2.0)
@@ -3859,8 +4025,7 @@ fn slider_row(
                         .a11y_hidden(),
                 )
                 .child(
-                    el()
-                        .key("knob")
+                    el().key("knob")
                         .size(k, k)
                         .absolute((shown - min) / (max - min) * travel, (h - k) / 2.0)
                         .radius(k / 2.0)
@@ -3965,8 +4130,7 @@ fn cycle_tab_highlight(s: &mut Sash) {
 }
 
 fn tab_menu_backdrop() -> El {
-    el()
-        .key("tab-menu-backdrop")
+    el().key("tab-menu-backdrop")
         .absolute(0.0, 0.0)
         .w_full()
         .h_full()
@@ -3997,8 +4161,7 @@ fn tab_menu_card(s: &Sash, menu: TabMenu) -> El {
         .fill(srgb(Rgb::new(0x16, 0x1b, 0x25), 0.99))
         .border(1.0, Color::WHITE.alpha(0.14));
     let item = |key: &str, label: &str| {
-        el()
-            .key(key)
+        el().key(key)
             .w_full()
             .h(26.0)
             .px(9.0)
@@ -4007,8 +4170,7 @@ fn tab_menu_card(s: &Sash, menu: TabMenu) -> El {
             .child(text(label).font(s.small_style(400.0, 12.0)).color(t.text))
     };
     let muted = |key: &str, label: &str| {
-        el()
-            .key(key)
+        el().key(key)
             .w_full()
             .h(26.0)
             .px(9.0)
@@ -4021,36 +4183,38 @@ fn tab_menu_card(s: &Sash, menu: TabMenu) -> El {
             )
     };
     card = card.child(
-        item("tab-rename", "Rename Tab…")
-            .on_press(move |s: &mut Sash| s.begin_rename(menu.tab)),
+        item("tab-rename", "Rename Tab…").on_press(move |s: &mut Sash| s.begin_rename(menu.tab)),
     );
     if named {
-        card = card.child(
-            item("tab-auto-name", "Use Automatic Title").on_press(move |s: &mut Sash| {
+        card = card.child(item("tab-auto-name", "Use Automatic Title").on_press(
+            move |s: &mut Sash| {
                 s.tab_menu = None;
                 s.clear_tab_name(menu.tab);
-            }),
-        );
+            },
+        ));
     }
     card = card
-        .child(item("tab-duplicate", "Duplicate Tab").on_press(move |s: &mut Sash| {
-            s.tab_menu = None;
-            s.duplicate_tab();
-        }))
-        .child(item("tab-move-left", "Move Left").on_press(move |s: &mut Sash| {
-            s.tab_menu = None;
-            s.move_tab(menu.tab, menu.tab.saturating_sub(1));
-        }))
-        .child(item("tab-move-right", "Move Right").on_press(move |s: &mut Sash| {
-            s.tab_menu = None;
-            s.move_tab(menu.tab, menu.tab + 1);
-        }))
         .child(
-            item(
-                "tab-pin",
-                if pinned { "Unpin Tab" } else { "Pin Tab" },
-            )
-            .on_press(move |s: &mut Sash| s.toggle_tab_pin(menu.tab)),
+            item("tab-duplicate", "Duplicate Tab").on_press(move |s: &mut Sash| {
+                s.tab_menu = None;
+                s.duplicate_tab();
+            }),
+        )
+        .child(
+            item("tab-move-left", "Move Left").on_press(move |s: &mut Sash| {
+                s.tab_menu = None;
+                s.move_tab(menu.tab, menu.tab.saturating_sub(1));
+            }),
+        )
+        .child(
+            item("tab-move-right", "Move Right").on_press(move |s: &mut Sash| {
+                s.tab_menu = None;
+                s.move_tab(menu.tab, menu.tab + 1);
+            }),
+        )
+        .child(
+            item("tab-pin", if pinned { "Unpin Tab" } else { "Pin Tab" })
+                .on_press(move |s: &mut Sash| s.toggle_tab_pin(menu.tab)),
         );
     card = card.child(if pinned {
         muted("tab-close", "Close Tab (pinned)")
@@ -4075,16 +4239,25 @@ fn tab_menu_card(s: &Sash, menu: TabMenu) -> El {
                         .color(t.text_secondary),
                 ),
         );
-    let mut swatches = row().key("tab-colors").w_full().h(22.0).px(9.0).gap(4.0).center_y();
+    let mut swatches = row()
+        .key("tab-colors")
+        .w_full()
+        .h(22.0)
+        .px(9.0)
+        .gap(4.0)
+        .center_y();
     swatches = swatches.child(
-        el()
-            .key("tab-color-none")
+        el().key("tab-color-none")
             .size(16.0, 16.0)
             .radius(8.0)
             .fill(Color::TRANSPARENT)
             .border(
                 if current.is_none() { 2.0 } else { 1.0 },
-                if current.is_none() { Color::WHITE } else { Color::WHITE.alpha(0.28) },
+                if current.is_none() {
+                    Color::WHITE
+                } else {
+                    Color::WHITE.alpha(0.28)
+                },
             )
             .on_press(move |s: &mut Sash| s.set_tab_color(menu.tab, None)),
     );
@@ -4092,14 +4265,17 @@ fn tab_menu_card(s: &Sash, menu: TabMenu) -> El {
         let index = index as u8;
         let selected = current == Some(index);
         swatches = swatches.child(
-            el()
-                .key(format!("tab-color-{index}"))
+            el().key(format!("tab-color-{index}"))
                 .size(16.0, 16.0)
                 .radius(8.0)
                 .fill(srgb(*color, if selected { 1.0 } else { 0.78 }))
                 .border(
                     if selected { 2.0 } else { 1.0 },
-                    if selected { Color::WHITE } else { Color::WHITE.alpha(0.20) },
+                    if selected {
+                        Color::WHITE
+                    } else {
+                        Color::WHITE.alpha(0.20)
+                    },
                 )
                 .on_press(move |s: &mut Sash| s.set_tab_color(menu.tab, Some(index))),
         );
@@ -4112,8 +4288,7 @@ fn rename_overlay(s: &Sash) -> El {
     let Some(rename) = &s.rename else {
         return el();
     };
-    el()
-        .key("rename-overlay")
+    el().key("rename-overlay")
         .absolute(0.0, 0.0)
         .w_full()
         .h_full()
@@ -4164,8 +4339,7 @@ fn rename_overlay(s: &Sash) -> El {
                         .center_y()
                         .child(spacer())
                         .child(
-                            el()
-                                .key("rename-cancel")
+                            el().key("rename-cancel")
                                 .h(26.0)
                                 .px(10.0)
                                 .radius(6.0)
@@ -4179,8 +4353,7 @@ fn rename_overlay(s: &Sash) -> El {
                                 ),
                         )
                         .child(
-                            el()
-                                .key("rename-save")
+                            el().key("rename-save")
                                 .h(26.0)
                                 .px(10.0)
                                 .radius(6.0)
@@ -4198,8 +4371,7 @@ fn rename_overlay(s: &Sash) -> El {
 }
 
 fn palette_backdrop() -> El {
-    el()
-        .key("palette-backdrop")
+    el().key("palette-backdrop")
         .absolute(0.0, 0.0)
         .w_full()
         .h_full()
@@ -4272,7 +4444,9 @@ fn palette_card(s: &Sash) -> El {
     }
     let first = s.palette.selected.saturating_sub(rows.saturating_sub(1));
     for (slot, index) in matches.into_iter().skip(first).take(rows).enumerate() {
-        let Some(item) = items.get(index) else { continue };
+        let Some(item) = items.get(index) else {
+            continue;
+        };
         let selected = first + slot == s.palette.selected;
         let action = item.action.clone();
         card = card.child(
@@ -4284,7 +4458,11 @@ fn palette_card(s: &Sash) -> El {
                 .gap(8.0)
                 .center_y()
                 .radius(6.0)
-                .fill(if selected { srgb(ACCENT, 0.22) } else { Color::TRANSPARENT })
+                .fill(if selected {
+                    srgb(ACCENT, 0.22)
+                } else {
+                    Color::TRANSPARENT
+                })
                 .on_press_tx(move |s: &mut Sash, tx: &mut Tx| {
                     s.run_palette_action(action.clone(), tx)
                 })
@@ -4352,8 +4530,7 @@ fn confirm_overlay(s: &Sash) -> El {
     } else {
         "Close Tab"
     };
-    el()
-        .key("confirm-overlay")
+    el().key("confirm-overlay")
         .absolute(0.0, 0.0)
         .w_full()
         .h_full()
@@ -4382,8 +4559,7 @@ fn confirm_overlay(s: &Sash) -> El {
                         .center_y()
                         .child(spacer())
                         .child(
-                            el()
-                                .key("confirm-cancel")
+                            el().key("confirm-cancel")
                                 .h(26.0)
                                 .px(10.0)
                                 .radius(6.0)
@@ -4397,8 +4573,7 @@ fn confirm_overlay(s: &Sash) -> El {
                                 ),
                         )
                         .child(
-                            el()
-                                .key("confirm-go")
+                            el().key("confirm-go")
                                 .h(26.0)
                                 .px(10.0)
                                 .radius(6.0)
@@ -4426,8 +4601,7 @@ fn welcome_overlay(s: &Sash) -> El {
             .font(s.small_style(400.0, 11.0))
             .color(t.text_secondary)
     };
-    el()
-        .key("welcome-overlay")
+    el().key("welcome-overlay")
         .absolute(0.0, 0.0)
         .w_full()
         .h_full()
@@ -4448,33 +4622,31 @@ fn welcome_overlay(s: &Sash) -> El {
                         .font(s.small_style(600.0, 14.0))
                         .color(t.text),
                 )
-                .child(line("Sash lives in the menu bar; there is no Dock icon.".into()))
+                .child(line(
+                    "Sash lives in the menu bar; there is no Dock icon.".into(),
+                ))
                 .child(line(format!(
                     "Press {hotkey} to drop it down, and again to hide it."
                 )))
-                .child(line("⌘, opens Settings, and the ghost menu can quit.".into()))
+                .child(line(
+                    "⌘, opens Settings, and the ghost menu can quit.".into(),
+                ))
                 .child(line("Right-click a tab to name, colour, or pin it.".into()))
                 .child(
-                    row()
-                        .w_full()
-                        .gap(8.0)
-                        .center_y()
-                        .child(spacer())
-                        .child(
-                            el()
-                                .key("welcome-done")
-                                .h(26.0)
-                                .px(12.0)
-                                .radius(6.0)
-                                .center()
-                                .fill(accent)
-                                .on_press(|s: &mut Sash| s.dismiss_welcome())
-                                .child(
-                                    text("Got it")
-                                        .font(s.small_style(500.0, 12.0))
-                                        .color(srgb(DEFAULT_BG, 1.0)),
-                                ),
-                        ),
+                    row().w_full().gap(8.0).center_y().child(spacer()).child(
+                        el().key("welcome-done")
+                            .h(26.0)
+                            .px(12.0)
+                            .radius(6.0)
+                            .center()
+                            .fill(accent)
+                            .on_press(|s: &mut Sash| s.dismiss_welcome())
+                            .child(
+                                text("Got it")
+                                    .font(s.small_style(500.0, 12.0))
+                                    .color(srgb(DEFAULT_BG, 1.0)),
+                            ),
+                    ),
                 ),
         )
 }
@@ -4483,7 +4655,9 @@ fn welcome_overlay(s: &Sash) -> El {
 /// scrollback search usually lives.
 fn find_bar(s: &Sash, m: &Metrics, cols: u16, ox: f32, oy: f32) -> El {
     let t = s.theme();
-    let width = (cols as f32 * m.cw - 16.0).clamp(180.0, 380.0).min((cols as f32 * m.cw).max(120.0));
+    let width = (cols as f32 * m.cw - 16.0)
+        .clamp(180.0, 380.0)
+        .min((cols as f32 * m.cw).max(120.0));
     let x = (cols as f32 * m.cw - width - 2.0).max(0.0);
     let count = if s.find.needle.is_empty() {
         String::new()
@@ -4595,7 +4769,11 @@ fn terminal(s: &Sash) -> El {
     let t = s.theme();
     let mut root = el().key("term").w_full().grow(1.0);
     let Some(tab) = s.active_tab() else {
-        return root.child(text("no tab").font(s.run_style(400.0)).color(t.text_secondary));
+        return root.child(
+            text("no tab")
+                .font(s.run_style(400.0))
+                .color(t.text_secondary),
+        );
     };
     let split = tab.panes.len() > 1;
     for (index, pane) in tab.panes.iter().enumerate() {
@@ -4641,8 +4819,8 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
             if s.active_tab().is_some_and(|tab| tab.focus != index) {
                 s.focus_pane(index);
             }
-            let tracked = !s.mods.shift
-                && s.active_pane().is_some_and(|pane| pane.vt.mouse_tracking());
+            let tracked =
+                !s.mods.shift && s.active_pane().is_some_and(|pane| pane.vt.mouse_tracking());
             if tracked {
                 s.wheel_mouse(ev.x, ev.y, rows > 0, rows.abs());
             } else {
@@ -4651,7 +4829,11 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
             // Claim even sub-row travel, so the accumulator keeps it.
             true
         })
-        .pointer_buttons([PointerButton::Middle, PointerButton::Back, PointerButton::Forward])
+        .pointer_buttons([
+            PointerButton::Middle,
+            PointerButton::Back,
+            PointerButton::Forward,
+        ])
         .on_pointer_move_local(move |s: &mut Sash, p, _tx| {
             if s.mouse_down || s.pending_paste.is_some() || s.mods.shift {
                 return;
@@ -4660,7 +4842,11 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
             if tab.focus != index {
                 return;
             }
-            if tab.panes.get(index).is_some_and(|pane| pane.vt.mouse_any_event()) {
+            if tab
+                .panes
+                .get(index)
+                .is_some_and(|pane| pane.vt.mouse_any_event())
+            {
                 s.send_mouse(ffi::GHOSTTY_MOUSE_ACTION_MOTION, None, p.x, p.y);
             }
         })
@@ -4672,8 +4858,18 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
                 s.focus_pane(index);
             }
             if s.active_pane().is_some_and(|pane| pane.vt.mouse_tracking()) {
-                s.send_mouse(ffi::GHOSTTY_MOUSE_ACTION_PRESS, Some(ffi::GHOSTTY_MOUSE_BUTTON_RIGHT), p.x, p.y);
-                s.send_mouse(ffi::GHOSTTY_MOUSE_ACTION_RELEASE, Some(ffi::GHOSTTY_MOUSE_BUTTON_RIGHT), p.x, p.y);
+                s.send_mouse(
+                    ffi::GHOSTTY_MOUSE_ACTION_PRESS,
+                    Some(ffi::GHOSTTY_MOUSE_BUTTON_RIGHT),
+                    p.x,
+                    p.y,
+                );
+                s.send_mouse(
+                    ffi::GHOSTTY_MOUSE_ACTION_RELEASE,
+                    Some(ffi::GHOSTTY_MOUSE_BUTTON_RIGHT),
+                    p.x,
+                    p.y,
+                );
             }
         })
         .on_drag(move |s: &mut Sash, d: &mut Drag, tx| {
@@ -4686,8 +4882,8 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
             let Some(at) = s.cell_at(d.x, d.y) else {
                 return;
             };
-            let tracking = !s.mods.shift
-                && s.active_pane().is_some_and(|pane| pane.vt.mouse_tracking());
+            let tracking =
+                !s.mods.shift && s.active_pane().is_some_and(|pane| pane.vt.mouse_tracking());
             match d.phase {
                 Phase::Down => {
                     if s.mods.cmd
@@ -4719,7 +4915,12 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
                         return;
                     }
                     if tracking {
-                        s.send_mouse(ffi::GHOSTTY_MOUSE_ACTION_MOTION, Some(mouse_button(tx.button())), d.x, d.y);
+                        s.send_mouse(
+                            ffi::GHOSTTY_MOUSE_ACTION_MOTION,
+                            Some(mouse_button(tx.button())),
+                            d.x,
+                            d.y,
+                        );
                         return;
                     }
                     if let Some(selection) = s.selection.as_mut() {
@@ -4730,7 +4931,12 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
                 Phase::Up => {
                     if tracking || s.mouse_down {
                         s.mouse_down = false;
-                        s.send_mouse(ffi::GHOSTTY_MOUSE_ACTION_RELEASE, Some(mouse_button(tx.button())), d.x, d.y);
+                        s.send_mouse(
+                            ffi::GHOSTTY_MOUSE_ACTION_RELEASE,
+                            Some(mouse_button(tx.button())),
+                            d.x,
+                            d.y,
+                        );
                         return;
                     }
                     let dragged = d.dx.abs() > 3.0 || d.dy.abs() > 3.0;
@@ -4767,8 +4973,7 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
             }
             if let Some(bg) = bg {
                 area = area.child(
-                    el()
-                        .key(format!("bg-{index}-{y}-{start}"))
+                    el().key(format!("bg-{index}-{y}-{start}"))
                         .transition(instant)
                         .absolute(ox + start as f32 * m.cw, oy + y as f32 * m.ch)
                         .size((x - start) as f32 * m.cw, m.ch)
@@ -4803,8 +5008,7 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
                     x += 1;
                 }
                 area = area.child(
-                    el()
-                        .key(format!("sel-{index}-{y}-{start}"))
+                    el().key(format!("sel-{index}-{y}-{start}"))
                         .transition(instant)
                         .absolute(ox + start as f32 * m.cw, oy + y as f32 * m.ch)
                         .size((x - start) as f32 * m.cw, m.ch)
@@ -4817,8 +5021,7 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
     // The selected find match, over the selection tint but under the text.
     for (y, x0, x1) in pane.vt.search_highlight() {
         area = area.child(
-            el()
-                .key(format!("find-{index}-{y}-{x0}"))
+            el().key(format!("find-{index}-{y}-{x0}"))
                 .transition(instant)
                 .absolute(ox + x0 as f32 * m.cw, oy + y as f32 * m.ch)
                 .size((x1 - x0 + 1) as f32 * m.cw, m.ch)
@@ -4832,12 +5035,18 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
         if let Some((cx, cy)) = grid.cursor {
             let (w, h, x, y) = match grid.cursor_style.unwrap_or(CursorStyle::Block) {
                 CursorStyle::Bar => (2.0, m.ch, ox + cx as f32 * m.cw, oy + cy as f32 * m.ch),
-                CursorStyle::Underline => (m.cw, 2.0, ox + cx as f32 * m.cw, oy + cy as f32 * m.ch + m.ch - 2.0),
-                CursorStyle::Block | CursorStyle::Hollow => (m.cw, m.ch, ox + cx as f32 * m.cw, oy + cy as f32 * m.ch),
+                CursorStyle::Underline => (
+                    m.cw,
+                    2.0,
+                    ox + cx as f32 * m.cw,
+                    oy + cy as f32 * m.ch + m.ch - 2.0,
+                ),
+                CursorStyle::Block | CursorStyle::Hollow => {
+                    (m.cw, m.ch, ox + cx as f32 * m.cw, oy + cy as f32 * m.ch)
+                }
             };
             area = area.child(
-                el()
-                    .key(format!("cursor-{index}"))
+                el().key(format!("cursor-{index}"))
                     .transition(instant)
                     .absolute(x, y)
                     .size(w, h)
@@ -4846,8 +5055,7 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
             // Tell the input method where the caret is, so candidates and the
             // emoji picker open beside the text they will replace.
             area = area.child(
-                el()
-                    .key(format!("ime-caret-{index}"))
+                el().key(format!("ime-caret-{index}"))
                     .absolute(x, y)
                     .size(1.0, m.ch)
                     .ime_cursor(),
@@ -4868,12 +5076,15 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
                 continue;
             }
             if let Some(ch) = special_cell(&cell.text) {
-                let alpha = if cell.flags & FLAG_FAINT != 0 { 0.6 } else { 1.0 };
+                let alpha = if cell.flags & FLAG_FAINT != 0 {
+                    0.6
+                } else {
+                    1.0
+                };
                 if let Some(rects) = crate::cell_glyphs::rects(ch, m.cw, m.ch) {
                     for (i, rect) in rects.iter().enumerate() {
                         area = area.child(
-                            el()
-                                .key(format!("glyph-{index}-{y}-{x}-{i}"))
+                            el().key(format!("glyph-{index}-{y}-{x}-{i}"))
                                 .transition(instant)
                                 .absolute(
                                     ox + x as f32 * m.cw + rect.x,
@@ -4934,8 +5145,7 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
             0.0
         };
         area = area.child(
-            el()
-                .key(format!("scrollbar-{index}"))
+            el().key(format!("scrollbar-{index}"))
                 .transition(instant)
                 .absolute(ox + grid.cols as f32 * m.cw - 4.0, oy + y)
                 .size(3.0, thumb)
@@ -4951,8 +5161,7 @@ fn pane_terminal(s: &Sash, pane: &Pane, index: usize, focused: bool, split: bool
         let x = (cx as f32 + 1.0).min(grid.cols.saturating_sub(1) as f32);
         let width = (preedit.chars().count() as f32 * m.cw).max(m.cw);
         area = area.child(
-            el()
-                .key(format!("preedit-bg-{index}"))
+            el().key(format!("preedit-bg-{index}"))
                 .absolute(ox + x * m.cw, oy + cy as f32 * m.ch)
                 .size(width, m.ch)
                 .radius(2.0)
@@ -4982,8 +5191,7 @@ fn paste_overlay(s: &Sash) -> El {
         return el();
     };
     let lines = pending.lines().count().max(1);
-    el()
-        .key("paste-overlay")
+    el().key("paste-overlay")
         .absolute(0.0, 0.0)
         .w_full()
         .h_full()
@@ -5016,8 +5224,7 @@ fn paste_overlay(s: &Sash) -> El {
                         .center_y()
                         .child(spacer())
                         .child(
-                            el()
-                                .key("paste-cancel")
+                            el().key("paste-cancel")
                                 .h(26.0)
                                 .px(10.0)
                                 .radius(6.0)
@@ -5031,8 +5238,7 @@ fn paste_overlay(s: &Sash) -> El {
                                 ),
                         )
                         .child(
-                            el()
-                                .key("paste-go")
+                            el().key("paste-go")
                                 .h(26.0)
                                 .px(10.0)
                                 .radius(6.0)
@@ -5072,7 +5278,10 @@ mod tests {
         assert_eq!(directory_title("~").as_deref(), Some("Home"));
         assert_eq!(directory_title("~/").as_deref(), Some("Home"));
         assert_eq!(directory_title("~/mine/sash/").as_deref(), Some("sash"));
-        assert_eq!(directory_title("/tmp/a-project/").as_deref(), Some("a-project"));
+        assert_eq!(
+            directory_title("/tmp/a-project/").as_deref(),
+            Some("a-project")
+        );
         assert_eq!(directory_title("/").as_deref(), Some("/"));
         assert_eq!(directory_title("opencode"), None);
         assert_eq!(directory_title("sash"), None);
@@ -5080,12 +5289,18 @@ mod tests {
 
     #[test]
     fn natural_tabs_have_a_minimum_and_fill_tabs_share_the_free_width() {
-        assert_eq!(calculate_tab_widths(1_000.0, 80.0, &[60.0, 140.0], false), [120.0, 140.0]);
+        assert_eq!(
+            calculate_tab_widths(1_000.0, 80.0, &[60.0, 140.0], false),
+            [120.0, 140.0]
+        );
         let filled = calculate_tab_widths(1_000.0, 80.0, &[60.0, 140.0], true);
         assert_eq!(filled, [417.5, 417.5]);
         let reserved = PAD_X * 2.0 + TAB_CONTROLS_WIDTH + 80.0 + 5.0 * TAB_GAP;
         assert_eq!(filled.iter().sum::<f32>() + reserved, 1_000.0);
-        assert_eq!(calculate_tab_widths(100.0, 80.0, &[60.0], true), [TAB_MIN_FILL_WIDTH]);
+        assert_eq!(
+            calculate_tab_widths(100.0, 80.0, &[60.0], true),
+            [TAB_MIN_FILL_WIDTH]
+        );
         assert!(calculate_tab_widths(1_000.0, 80.0, &[], true).is_empty());
     }
 
@@ -5120,7 +5335,10 @@ mod tests {
         std::fs::write(&path, "x").unwrap();
         let text = path.to_string_lossy().into_owned();
         assert_eq!(palette_target(&text), Some((path.clone(), None)));
-        assert_eq!(palette_target(&format!("{text}:42")), Some((path.clone(), Some(42))));
+        assert_eq!(
+            palette_target(&format!("{text}:42")),
+            Some((path.clone(), Some(42)))
+        );
         assert_eq!(
             palette_target(&format!("{text}:42:7")),
             Some((path.clone(), Some(42)))
@@ -5147,11 +5365,29 @@ mod tests {
         let cases = [
             (
                 PhysicalKeyCode::Space,
-                Mods { cmd: true, shift: true, ..Default::default() },
+                Mods {
+                    cmd: true,
+                    shift: true,
+                    ..Default::default()
+                },
                 "⇧⌘Space",
             ),
-            (PhysicalKeyCode::Slash, Mods { cmd: true, ..Default::default() }, "⌘/"),
-            (PhysicalKeyCode::F12, Mods { alt: true, ..Default::default() }, "⌥F12"),
+            (
+                PhysicalKeyCode::Slash,
+                Mods {
+                    cmd: true,
+                    ..Default::default()
+                },
+                "⌘/",
+            ),
+            (
+                PhysicalKeyCode::F12,
+                Mods {
+                    alt: true,
+                    ..Default::default()
+                },
+                "⌥F12",
+            ),
         ];
         for (code, mods, pretty) in cases {
             let shortcut = Shortcut::from_physical_key(code, mods).unwrap();

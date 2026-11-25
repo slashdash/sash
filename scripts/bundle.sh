@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Sash contributors
+# SPDX-License-Identifier: MIT
+
 # Build a menu-bar .app bundle at dist/Sash.app.
 #
 #   scripts/bundle.sh              native build (arm64 on Apple Silicon)
@@ -52,6 +55,10 @@ fi
 if [ -f "$root/assets/AppIcon.icns" ]; then
     cp "$root/assets/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 fi
+
+# The MIT and dependency notices travel with every copy of the binary.
+cp "$root/LICENSE" "$app/Contents/Resources/LICENSE.txt"
+cp "$root/THIRD-PARTY.html" "$app/Contents/Resources/Third-Party Notices.html"
 
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

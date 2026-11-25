@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! The menu-bar extra: a template icon plus Show / New Tab / Quit.
 
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};

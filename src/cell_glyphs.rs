@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! Cell-filling glyphs for block and box-drawing characters.
 //!
 //! A terminal cell is taller than a font's em box: the cell height carries
@@ -19,7 +22,13 @@ pub struct Rect {
 
 impl Rect {
     const fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
-        Self { x, y, w, h, alpha: 1.0 }
+        Self {
+            x,
+            y,
+            w,
+            h,
+            alpha: 1.0,
+        }
     }
 
     const fn shade(x: f32, y: f32, w: f32, h: f32, alpha: f32) -> Self {
@@ -151,9 +160,19 @@ fn box_drawing(cp: u32, w: f32, h: f32, out: &mut Vec<Rect>) {
         for part in (0..parts).step_by(2) {
             let offset = part as f32 * segment;
             if vertical {
-                out.push(Rect::new(w / 2.0 - thickness / 2.0, offset, thickness, segment));
+                out.push(Rect::new(
+                    w / 2.0 - thickness / 2.0,
+                    offset,
+                    thickness,
+                    segment,
+                ));
             } else {
-                out.push(Rect::new(offset, h / 2.0 - thickness / 2.0, segment, thickness));
+                out.push(Rect::new(
+                    offset,
+                    h / 2.0 - thickness / 2.0,
+                    segment,
+                    thickness,
+                ));
             }
         }
         return;
@@ -324,7 +343,9 @@ mod tests {
         for ch in ['╒', '╓', '╞', '╥', '╪'] {
             let rects = shape(ch);
             assert!(
-                rects.iter().any(|r| r.x <= 4.0 && r.x + r.w >= 4.0 && r.y <= 8.0 && r.y + r.h >= 8.0),
+                rects
+                    .iter()
+                    .any(|r| r.x <= 4.0 && r.x + r.w >= 4.0 && r.y <= 8.0 && r.y + r.h >= 8.0),
                 "{ch} must cover the cell centre"
             );
         }
@@ -335,7 +356,10 @@ mod tests {
         let dash = shape('┄');
         assert_eq!(dash.len(), 3);
         let last = dash.last().unwrap();
-        assert!(last.x + last.w < 8.0, "the last dash leaves a gap at the edge");
+        assert!(
+            last.x + last.w < 8.0,
+            "the last dash leaves a gap at the edge"
+        );
         assert_eq!(last.y, 7.5);
         assert_eq!(last.h, 1.0);
     }

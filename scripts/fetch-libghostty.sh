@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Sash contributors
+# SPDX-License-Identifier: MIT
+
 # Fetch the prebuilt libghostty-vt XCFramework that sash links against.
 #
 # The upstream "tip" release is rebuilt on every commit to Ghostty's main branch,

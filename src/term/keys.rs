@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! Rune key events -> the bytes a pty program expects, via libghostty-vt's encoder.
 
 use rune::{Key, KeyEvent, Mods};

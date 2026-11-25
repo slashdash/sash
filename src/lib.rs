@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! sash — a Quake-style drop-down terminal built on Rune and libghostty-vt.
 
 pub mod app;
@@ -13,7 +16,9 @@ pub mod tray;
 
 use std::sync::OnceLock;
 
-use rune::{App, AppHandle, AppSpec, Cx, El, KeyEvent, MacWindowOptions, Tx, WindowHandle, WindowOptions};
+use rune::{
+    App, AppHandle, AppSpec, Cx, El, KeyEvent, MacWindowOptions, Tx, WindowHandle, WindowOptions,
+};
 
 use app::Sash;
 use config::Config;
@@ -151,7 +156,9 @@ fn init_log() {
     if std::io::stderr().is_terminal() {
         return;
     }
-    let Some(home) = std::env::var_os("HOME") else { return };
+    let Some(home) = std::env::var_os("HOME") else {
+        return;
+    };
     let dir = std::path::PathBuf::from(home).join("Library/Logs/Sash");
     if std::fs::create_dir_all(&dir).is_err() {
         return;
@@ -161,7 +168,11 @@ fn init_log() {
     if std::fs::metadata(&path).is_ok_and(|meta| meta.len() > 1_000_000) {
         let _ = std::fs::remove_file(&path);
     }
-    let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) else {
+    let Ok(file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    else {
         return;
     };
     // SAFETY: dup2 onto this process's own stderr before the app starts threads.
@@ -169,10 +180,17 @@ fn init_log() {
     let default = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         default(info);
-        eprintln!("backtrace:
-{}", std::backtrace::Backtrace::force_capture());
+        eprintln!(
+            "backtrace:
+{}",
+            std::backtrace::Backtrace::force_capture()
+        );
     }));
-    eprintln!("--- sash {} on macOS {} ---", version_label(), std::env::consts::ARCH);
+    eprintln!(
+        "--- sash {} on macOS {} ---",
+        version_label(),
+        std::env::consts::ARCH
+    );
 }
 
 pub fn run() {
@@ -180,14 +198,22 @@ pub fn run() {
     let cfg = Config::load();
     let screen = macos::preferred_screen(cfg.display).unwrap_or_default();
 
-    let width = cfg.width.unwrap_or_else(|| screen.width_pt()).clamp(320.0, screen.width_pt());
+    let width = cfg
+        .width
+        .unwrap_or_else(|| screen.width_pt())
+        .clamp(320.0, screen.width_pt());
     let height = app::panel_height(cfg.height, screen.usable_height_pt());
     let px_w = (width * screen.scale as f32).round() as u32;
     let px_h = (height * screen.scale as f32).round() as u32;
     let x = ((screen.width_px as f32 - px_w as f32) / 2.0).round() as i32;
     let top = 0;
 
-    let _ = BOOT.set(Boot { cfg: cfg.clone(), screen, width, height });
+    let _ = BOOT.set(Boot {
+        cfg: cfg.clone(),
+        screen,
+        width,
+        height,
+    });
     eprintln!(
         "sash: panel {width}x{height} pt at ({x}, {top}) on a {}x{} pt screen, scale {}",
         screen.width_pt(),

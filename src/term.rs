@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! Terminal core: libghostty-vt terminal state, pty plumbing, key encoding.
 
 pub mod cwd;
@@ -35,13 +38,21 @@ impl Rgb {
 
 impl From<ffi::GhosttyColorRgb> for Rgb {
     fn from(c: ffi::GhosttyColorRgb) -> Self {
-        Self { r: c.r, g: c.g, b: c.b }
+        Self {
+            r: c.r,
+            g: c.g,
+            b: c.b,
+        }
     }
 }
 
 impl From<Rgb> for ffi::GhosttyColorRgb {
     fn from(c: Rgb) -> Self {
-        Self { r: c.r, g: c.g, b: c.b }
+        Self {
+            r: c.r,
+            g: c.g,
+            b: c.b,
+        }
     }
 }
 
@@ -386,7 +397,8 @@ fn percent_decode(text: &str) -> String {
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len()
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
             && let (Some(high), Some(low)) = (hex(bytes[i + 1]), hex(bytes[i + 2]))
         {
             out.push(high * 16 + low);
@@ -444,9 +456,16 @@ impl Vt {
 
         unsafe {
             let mut term: ffi::GhosttyTerminal = std::ptr::null_mut();
-            check(ffi::ghostty_terminal_new(std::ptr::null(), &mut term, cols, rows), "terminal_new");
+            check(
+                ffi::ghostty_terminal_new(std::ptr::null(), &mut term, cols, rows),
+                "terminal_new",
+            );
 
-            ffi::ghostty_terminal_set(term, ffi::GHOSTTY_TERMINAL_OPT_USERDATA, userdata as *const c_void);
+            ffi::ghostty_terminal_set(
+                term,
+                ffi::GHOSTTY_TERMINAL_OPT_USERDATA,
+                userdata as *const c_void,
+            );
             ffi::ghostty_terminal_set(
                 term,
                 ffi::GHOSTTY_TERMINAL_OPT_WRITE_PTY,
@@ -489,18 +508,30 @@ impl Vt {
             );
 
             let mut render: ffi::GhosttyRenderState = std::ptr::null_mut();
-            check(ffi::ghostty_render_state_new(std::ptr::null(), &mut render), "render_state_new");
+            check(
+                ffi::ghostty_render_state_new(std::ptr::null(), &mut render),
+                "render_state_new",
+            );
             let mut rows_iter: ffi::GhosttyRenderStateRowIterator = std::ptr::null_mut();
             check(
                 ffi::ghostty_render_state_row_iterator_new(std::ptr::null(), &mut rows_iter),
                 "row_iterator_new",
             );
             let mut cells: ffi::GhosttyRenderStateRowCells = std::ptr::null_mut();
-            check(ffi::ghostty_render_state_row_cells_new(std::ptr::null(), &mut cells), "row_cells_new");
+            check(
+                ffi::ghostty_render_state_row_cells_new(std::ptr::null(), &mut cells),
+                "row_cells_new",
+            );
             let mut key_encoder: ffi::GhosttyKeyEncoder = std::ptr::null_mut();
-            check(ffi::ghostty_key_encoder_new(std::ptr::null(), &mut key_encoder), "key_encoder_new");
+            check(
+                ffi::ghostty_key_encoder_new(std::ptr::null(), &mut key_encoder),
+                "key_encoder_new",
+            );
             let mut key_event: ffi::GhosttyKeyEvent = std::ptr::null_mut();
-            check(ffi::ghostty_key_event_new(std::ptr::null(), &mut key_event), "key_event_new");
+            check(
+                ffi::ghostty_key_event_new(std::ptr::null(), &mut key_event),
+                "key_event_new",
+            );
             let mut mouse_encoder: ffi::GhosttyMouseEncoder = std::ptr::null_mut();
             check(
                 ffi::ghostty_mouse_encoder_new(std::ptr::null(), &mut mouse_encoder),
@@ -546,11 +577,27 @@ impl Vt {
         let bg: ffi::GhosttyColorRgb = bg.into();
         let palette: [ffi::GhosttyColorRgb; 256] = std::array::from_fn(|i| palette[i].into());
         unsafe {
-            ffi::ghostty_terminal_set(self.term, ffi::GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &fg as *const _ as *const c_void);
-            ffi::ghostty_terminal_set(self.term, ffi::GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &bg as *const _ as *const c_void);
-            ffi::ghostty_terminal_set(self.term, ffi::GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, palette.as_ptr() as *const c_void);
+            ffi::ghostty_terminal_set(
+                self.term,
+                ffi::GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND,
+                &fg as *const _ as *const c_void,
+            );
+            ffi::ghostty_terminal_set(
+                self.term,
+                ffi::GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND,
+                &bg as *const _ as *const c_void,
+            );
+            ffi::ghostty_terminal_set(
+                self.term,
+                ffi::GHOSTTY_TERMINAL_OPT_COLOR_PALETTE,
+                palette.as_ptr() as *const c_void,
+            );
             let cursor: ffi::GhosttyColorRgb = ACCENT.into();
-            ffi::ghostty_terminal_set(self.term, ffi::GHOSTTY_TERMINAL_OPT_COLOR_CURSOR, &cursor as *const _ as *const c_void);
+            ffi::ghostty_terminal_set(
+                self.term,
+                ffi::GHOSTTY_TERMINAL_OPT_COLOR_CURSOR,
+                &cursor as *const _ as *const c_void,
+            );
         }
     }
 
@@ -650,7 +697,9 @@ impl Vt {
     pub fn scroll_prompts(&mut self, delta: isize) {
         let viewport = ffi::GhosttyTerminalScrollViewport {
             tag: ffi::GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA_PROMPT,
-            value: ffi::GhosttyTerminalScrollViewportValue { delta_prompt: delta },
+            value: ffi::GhosttyTerminalScrollViewportValue {
+                delta_prompt: delta,
+            },
         };
         unsafe {
             let _ = ffi::ghostty_terminal_scroll_viewport(self.term, viewport);
@@ -829,7 +878,11 @@ impl Vt {
                     break;
                 }
                 let x0 = if y == first.y { first.x } else { 0 };
-                let x1 = if y == last.y { last.x } else { cols.saturating_sub(1) };
+                let x1 = if y == last.y {
+                    last.x
+                } else {
+                    cols.saturating_sub(1)
+                };
                 if x0 < cols && x0 <= x1 {
                     spans.push((y as u16, x0, x1));
                 }
@@ -890,7 +943,8 @@ impl Vt {
             if r != ffi::GHOSTTY_SUCCESS {
                 return false;
             }
-            let full = force_full || self.need_full || dirty == ffi::GHOSTTY_RENDER_STATE_DIRTY_FULL;
+            let full =
+                force_full || self.need_full || dirty == ffi::GHOSTTY_RENDER_STATE_DIRTY_FULL;
             if dirty == ffi::GHOSTTY_RENDER_STATE_DIRTY_FALSE && !full {
                 return false;
             }
@@ -1080,7 +1134,6 @@ impl Vt {
         }
     }
 
-
     unsafe fn read_row_cells(&mut self, y: u16, cols: usize, default_fg: Rgb, default_bg: Rgb) {
         unsafe {
             let r = ffi::ghostty_render_state_row_get(
@@ -1197,7 +1250,9 @@ impl Vt {
     pub fn scroll(&mut self, delta: i32) {
         let viewport = ffi::GhosttyTerminalScrollViewport {
             tag: ffi::GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA,
-            value: ffi::GhosttyTerminalScrollViewportValue { delta: delta as isize },
+            value: ffi::GhosttyTerminalScrollViewportValue {
+                delta: delta as isize,
+            },
         };
         unsafe {
             let _ = ffi::ghostty_terminal_scroll_viewport(self.term, viewport);
@@ -1280,7 +1335,11 @@ pub const fn mode(value: u16, ansi: bool) -> ffi::GhosttyMode {
 }
 
 fn check(result: ffi::GhosttyResult, what: &str) {
-    assert_eq!(result, ffi::GHOSTTY_SUCCESS, "libghostty-vt {what} failed: {result}");
+    assert_eq!(
+        result,
+        ffi::GHOSTTY_SUCCESS,
+        "libghostty-vt {what} failed: {result}"
+    );
 }
 
 /// OSC 133 shell integration: remember the command line at OUTPUT_START and
@@ -1381,7 +1440,10 @@ mod tests {
             ptr: b"text/plain;charset=utf-8".as_ptr(),
             len: 23,
         };
-        let data = ffi::GhosttyString { ptr: b"hello".as_ptr(), len: 5 };
+        let data = ffi::GhosttyString {
+            ptr: b"hello".as_ptr(),
+            len: 5,
+        };
         let content = ffi::GhosttyClipboardContent { mime, data };
         let write = ffi::GhosttyClipboardWrite {
             location: ffi::GHOSTTY_CLIPBOARD_LOCATION_STANDARD,
@@ -1389,7 +1451,10 @@ mod tests {
             contents_len: 1,
             ..Default::default()
         };
-        assert_eq!(unsafe { clipboard_text(&write) }, Some(Some("hello".into())));
+        assert_eq!(
+            unsafe { clipboard_text(&write) },
+            Some(Some("hello".into()))
+        );
 
         let empty = ffi::GhosttyClipboardWrite {
             location: ffi::GHOSTTY_CLIPBOARD_LOCATION_STANDARD,
@@ -1400,7 +1465,10 @@ mod tests {
         assert_eq!(unsafe { clipboard_text(&empty) }, Some(None));
 
         let other = ffi::GhosttyClipboardContent {
-            mime: ffi::GhosttyString { ptr: b"image/png".as_ptr(), len: 9 },
+            mime: ffi::GhosttyString {
+                ptr: b"image/png".as_ptr(),
+                len: 9,
+            },
             data,
         };
         let image = ffi::GhosttyClipboardWrite {

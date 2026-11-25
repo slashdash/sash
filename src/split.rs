@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 //! Split-pane geometry: the layout tree that divides the panel above libghostty.
 //!
 //! The tree only tracks which pane index sits where. Terminal state and the

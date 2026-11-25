@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Sash contributors
+# SPDX-License-Identifier: MIT
+
 # Build a DMG you can hand to testers.
 #
 #   scripts/package.sh              native build (Apple Silicon on an M-series Mac)
@@ -53,6 +56,10 @@ USING SASH
 - Cmd+, opens Settings. The ghost menu also has Settings and Quit.
 - If the shortcut types a special character or switches input sources, change
   it in Settings -> Shortcuts.
+
+LICENCES
+Sash is MIT licensed. The full text and every dependency notice are inside the
+app at Contents/Resources/ (LICENSE.txt and Third-Party Notices.html).
 
 IF SOMETHING GOES WRONG
 - Log: ~/Library/Logs/Sash/sash.log
