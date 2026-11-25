@@ -86,13 +86,14 @@ Rune draws the frame; libghostty-vt owns every byte of terminal state.
 
 ## Install
 
-Builds are attached to [Releases](https://github.com/slashdash/sash/releases);
-until the first public release, produce one with `scripts/package.sh`.
+There is no binary download yet. Sash is ad-hoc signed and cannot be notarized
+without a Developer ID, and macOS blocks unnotarized apps, so releases stay
+source-only until that changes — build it with the steps below.
 
-Sash is ad-hoc signed, not notarized, so macOS blocks the first launch:
+A local build behaves the same way on first launch:
 
-1. Open the DMG, drag **Sash** into `/Applications`, and launch it from there.
-   (Launching from the mounted image runs a temporary copy.)
+1. Drag `dist/Sash.app` into `/Applications` and launch it from there.
+   (Launching from the build directory runs a temporary copy.)
 2. When macOS says it cannot verify the app, open **System Settings → Privacy &
    Security**, scroll down, click **Open Anyway** next to Sash, authenticate and
    confirm. Terminal equivalent: `xattr -dr com.apple.quarantine /Applications/Sash.app`.

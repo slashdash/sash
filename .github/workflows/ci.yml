@@ -17,7 +17,8 @@ concurrency:
 jobs:
   check:
     name: fmt, clippy, test
-    runs-on: macos-14
+    # arm64 runners are public-repo only on this plan; this is the current Intel image.
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
 
