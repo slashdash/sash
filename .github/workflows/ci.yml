@@ -46,15 +46,16 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Secret scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: REUSE compliance
         run: |
           pipx install reuse
           reuse lint
+
+      # Last, because the action writes results.sarif into the checkout.
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Third-party notices are current
         run: |
