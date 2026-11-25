@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sash contributors
+// SPDX-License-Identifier: MIT
+
 use std::path::{Path, PathBuf};
 
 /// Ask git for a short answer, or give up when the tree has no repository.
@@ -15,19 +18,17 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
 }
 
 fn main() {
-    let arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
     let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if os != "macos" {
         panic!("sash currently links the macOS libghostty-vt build only (target OS: {os})");
     }
-    let slice = if arch == "aarch64" {
-        "macos-arm64_x86_64"
-    } else {
-        "macos-arm64_x86_64"
-    };
+    // The shipped XCFramework carries one universal slice for both architectures.
+    let slice = "macos-arm64_x86_64";
 
     let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    let xcf = root.join("vendor/ghostty-vt/ghostty-vt.xcframework").join(slice);
+    let xcf = root
+        .join("vendor/ghostty-vt/ghostty-vt.xcframework")
+        .join(slice);
     let headers = xcf.join("Headers");
     assert!(
         headers.join("ghostty/vt.h").exists(),
@@ -37,7 +38,10 @@ fn main() {
 
     println!("cargo:rustc-link-search=native={}", xcf.display());
     println!("cargo:rustc-link-lib=static=ghostty-vt");
-    println!("cargo:rerun-if-changed={}", xcf.join("libghostty-vt.a").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        xcf.join("libghostty-vt.a").display()
+    );
     println!("cargo:rerun-if-changed=build.rs");
 
     // Build identity for the Settings footer, the menu-bar menu and bug reports.
