@@ -42,6 +42,17 @@ impl TabHighlight {
     }
 }
 
+/// Where the panel hangs from the display.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PanelPlacement {
+    /// Flush with the physical top edge, covering the menu bar.
+    #[default]
+    ScreenTop,
+    /// Directly beneath the menu bar, leaving it visible.
+    BelowMenuBar,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -55,6 +66,8 @@ pub struct Config {
     /// rest left to right. `null` follows the pointer. Falls back to the menu-bar
     /// display while the chosen one is unplugged.
     pub display: Option<u32>,
+    /// Cover the menu bar at the physical top edge, or hang directly beneath it.
+    pub panel_placement: PanelPlacement,
     /// Put the tab strip under the terminal instead of above it.
     pub tabs_at_bottom: bool,
     /// Divide the available strip width equally between tabs instead of sizing
@@ -107,6 +120,7 @@ impl Default for Config {
             height: None,
             width: None,
             display: None,
+            panel_placement: PanelPlacement::ScreenTop,
             tabs_at_bottom: false,
             tabs_fill_width: false,
             tab_highlight: TabHighlight::WholeTab,
@@ -292,6 +306,7 @@ mod tests {
         assert!(Config::default().confirm_close);
         assert!(Config::default().restore_session);
         assert!(!Config::default().welcome_seen);
+        assert_eq!(Config::default().panel_placement, PanelPlacement::ScreenTop);
         assert_eq!(Config::default().scrollback_lines, Some(10_000));
         assert!(!Config::default().copy_on_select);
         assert!(!Config::default().clipboard_write);
@@ -314,6 +329,7 @@ mod tests {
         assert!(config.confirm_close);
         assert!(config.restore_session);
         assert!(!config.welcome_seen);
+        assert_eq!(config.panel_placement, PanelPlacement::ScreenTop);
         assert!(!config.tabs_at_bottom);
         assert!(!config.tabs_fill_width);
         assert_eq!(config.tab_highlight, TabHighlight::WholeTab);
@@ -333,6 +349,18 @@ mod tests {
         let config = Config::parse(r#"{"display":0}"#).unwrap();
         assert_eq!(config.display, None);
         assert_eq!(Config::default().display, None);
+    }
+
+    #[test]
+    fn panel_placement_round_trips() {
+        let config = Config {
+            panel_placement: PanelPlacement::BelowMenuBar,
+            ..Config::default()
+        };
+        let text = serde_json::to_string(&config).unwrap();
+        assert!(text.contains("\"panel_placement\":\"below_menu_bar\""));
+        let back: Config = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.panel_placement, PanelPlacement::BelowMenuBar);
     }
 
     #[test]

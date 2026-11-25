@@ -14,6 +14,8 @@ First public test build.
 
 - Drop-down panel from the physical top edge, 140 ms reveal, global hotkey,
   menu-bar item, display targeting and per-display return.
+- Panel placement setting: cover the menu bar at the physical top edge, or hang
+  directly beneath it.
 - Tabs: rename, reorder, duplicate, eight colours, pinning, session restore,
   folder-name titles, fill width, 120 pt minimum, four highlight styles,
   unread ring and OSC 9;4 progress.

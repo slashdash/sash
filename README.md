@@ -20,9 +20,10 @@ Rune draws the frame; libghostty-vt owns every byte of terminal state.
 
 ### Panel
 
-- Drops from the physical top edge of the display, covering the menu bar, in
-  140 ms, with rounded corners. Showing it takes the keyboard without pulling
-  another app forward.
+- Drops from the physical top edge of the display in 140 ms, with rounded
+  corners — covering the menu bar, or hanging directly beneath it (Settings →
+  Panel → Placement). Showing it takes the keyboard without pulling another app
+  forward.
 - Global hotkey, `⌘⇧Space` by default, registered through Carbon (no
   Accessibility permission). A conflict names the app that owns the chord.
 - Lives in the menu bar as a ghost hanging from a ceiling bar: Show/Hide, New
@@ -170,6 +171,7 @@ edits it live; the file is read at launch. The full default:
   "height": null,
   "width": null,
   "display": null,
+  "panel_placement": "screen_top",
   "tabs_at_bottom": false,
   "tabs_fill_width": false,
   "tab_highlight": "whole_tab",
@@ -199,6 +201,7 @@ edits it live; the file is read at launch. The full default:
 | `height` | `null` | Panel height in points; `null` fills from the physical top to the Dock |
 | `width` | `null` | Panel width in points; `null` is the full display |
 | `display` | `null` | 1-based display number; `null` follows the pointer |
+| `panel_placement` | `"screen_top"` | `screen_top` covers the menu bar; `below_menu_bar` starts under it |
 | `tabs_at_bottom` | `false` | Put the tab strip below the grid |
 | `tabs_fill_width` | `false` | Divide the strip equally instead of title-sized tabs |
 | `tab_highlight` | `"whole_tab"` | `dot`, `underline`, `whole_tab` or `text` |
@@ -228,6 +231,8 @@ Details that do not fit a table:
 - **`display`.** Numbered from 1, with the menu-bar display first and the rest
   left to right. A pinned display that is unplugged falls back to the menu-bar
   display and is reclaimed when it returns.
+- **`panel_placement`.** `screen_top` covers the menu bar; `below_menu_bar`
+  leaves it visible, and Full height shrinks by the menu bar's height.
 - **`tabs_fill_width`.** Off keeps title-sized tabs with a 120 pt minimum.
 - **Titles.** Directory-only titles show the folder name; a manual name wins.
 - **`clipboard_write`.** Writes are capped at 1 MiB and stripped of control

@@ -16,6 +16,8 @@ use objc2::{class, msg_send};
 use objc2_app_kit::{NSApplication, NSEvent, NSPanel, NSScreen};
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString};
 
+use crate::config::PanelPlacement;
+
 #[derive(Clone, Copy, Debug)]
 pub struct Screen {
     /// `CGDirectDisplayID`, to place the panel on the display this describes.
@@ -65,6 +67,14 @@ impl Screen {
     /// visible area.
     pub fn inset_pt(&self) -> f32 {
         (self.top as f64 / self.scale) as f32
+    }
+    /// The tallest panel this display can hold for a placement: to the Dock when
+    /// covering the menu bar, or from beneath the menu bar to the Dock.
+    pub fn panel_max_height_pt(&self, placement: PanelPlacement) -> f32 {
+        match placement {
+            PanelPlacement::ScreenTop => self.usable_height_pt(),
+            PanelPlacement::BelowMenuBar => (self.usable_height_pt() - self.inset_pt()).max(120.0),
+        }
     }
 }
 
@@ -229,10 +239,11 @@ pub fn set_panel_level(always_on_top: bool) {
 }
 
 /// Put the panel's window on the display `id`, centred across it and flush with
-/// that display's physical top edge, in AppKit points. Returns false before the panel's
-/// native window exists, so the caller can fall back to Rune's placement.
+/// that display's physical top edge (or its menu bar), in AppKit points. Returns
+/// false before the panel's native window exists, so the caller can fall back to
+/// Rune's placement.
 #[allow(unsafe_code)]
-pub fn place_panel(id: u32, width: f64, height: f64) -> bool {
+pub fn place_panel(id: u32, width: f64, height: f64, placement: PanelPlacement) -> bool {
     let Some(mtm) = MainThreadMarker::new() else {
         return false;
     };
@@ -241,8 +252,14 @@ pub fn place_panel(id: u32, width: f64, height: f64) -> bool {
         return false;
     };
     let frame = screen.frame();
+    let visible = screen.visibleFrame();
+    let inset = (frame.origin.y + frame.size.height) - (visible.origin.y + visible.size.height);
     let x = frame.origin.x + (frame.size.width - width) / 2.0;
-    let y = frame.origin.y + frame.size.height - height;
+    let top = match placement {
+        PanelPlacement::ScreenTop => frame.origin.y + frame.size.height,
+        PanelPlacement::BelowMenuBar => frame.origin.y + frame.size.height - inset,
+    };
+    let y = top - height;
     let rect = NSRect::new(NSPoint::new(x, y), NSSize::new(width, height));
     let app = NSApplication::sharedApplication(mtm);
     let Some(panel) = app
@@ -290,6 +307,16 @@ mod tests {
         assert_eq!(screen.inset_pt(), 12.0);
         assert_eq!(screen.usable_height_pt(), 820.0);
         assert_eq!(screen.height_pt() - screen.usable_height_pt(), 80.0);
+    }
+
+    #[test]
+    fn placement_decides_whether_the_panel_covers_the_menu_bar() {
+        let screen = Screen::default();
+        assert_eq!(screen.panel_max_height_pt(PanelPlacement::ScreenTop), 820.0);
+        assert_eq!(
+            screen.panel_max_height_pt(PanelPlacement::BelowMenuBar),
+            808.0
+        );
     }
 
     #[test]

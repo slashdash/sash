@@ -17,7 +17,7 @@ use rune::{
 
 use crate::ffi;
 
-use crate::config::{Config, Session, SessionTab, TabHighlight};
+use crate::config::{Config, PanelPlacement, Session, SessionTab, TabHighlight};
 use crate::macos::Screen;
 use crate::selection::{CellPos, Kind, Selection, line_at, word_at};
 use crate::split::{Dir, GAP, Rect, Tree};
@@ -1299,6 +1299,19 @@ impl Sash {
         tx.wake_after(Duration::ZERO);
     }
 
+    /// Flip between covering the menu bar at the screen top and hanging directly
+    /// beneath it. The height clamp follows the placement, so Full shrinks by the
+    /// menu bar's height and returns when the panel covers it again.
+    pub fn cycle_placement(&mut self, tx: &mut Tx) {
+        self.cfg.panel_placement = match self.cfg.panel_placement {
+            PanelPlacement::ScreenTop => PanelPlacement::BelowMenuBar,
+            PanelPlacement::BelowMenuBar => PanelPlacement::ScreenTop,
+        };
+        self.cfg.save();
+        self.apply_height(tx);
+        self.place();
+    }
+
     /// `fraction` of the display width; 1.0 stores "full width".
     pub fn set_width_fraction(&mut self, fraction: f32, tx: &mut Tx) {
         let full = self.screen.width_pt().max(320.0);
@@ -1504,9 +1517,14 @@ impl Sash {
         true
     }
 
+    /// The tallest the panel may be on this display for its placement.
+    fn max_panel_height(&self) -> f32 {
+        self.screen.panel_max_height_pt(self.cfg.panel_placement)
+    }
+
     /// `fraction` of the usable height (screen top to Dock); 1.0 stores "full".
     pub fn set_height_fraction(&mut self, fraction: f32, tx: &mut Tx) {
-        let full = self.screen.usable_height_pt().max(120.0);
+        let full = self.max_panel_height().max(120.0);
         let fraction = fraction.clamp(0.2, 1.0);
         self.cfg.height = if fraction >= 0.995 {
             None
@@ -1521,7 +1539,7 @@ impl Sash {
     /// While the bottom edge is dragged: follow the pointer without writing the
     /// config on every frame; the release commits it.
     fn set_height_live(&mut self, height: f32, tx: &mut Tx) {
-        let full = self.screen.usable_height_pt().max(120.0);
+        let full = self.max_panel_height().max(120.0);
         let height = height.clamp(120.0, full);
         if (height - self.height).abs() < 0.5 {
             return;
@@ -1541,7 +1559,7 @@ impl Sash {
 
     /// Resize the panel and every tab's grid to the configured height.
     fn apply_height(&mut self, tx: &mut Tx) {
-        let height = panel_height(self.cfg.height, self.screen.usable_height_pt());
+        let height = panel_height(self.cfg.height, self.max_panel_height());
         self.height = height;
         self.init_metrics();
         if self.shown {
@@ -1590,7 +1608,10 @@ impl Sash {
                 .width
                 .unwrap_or_else(|| screen.width_pt())
                 .clamp(320.0, screen.width_pt());
-            self.height = panel_height(self.cfg.height, screen.usable_height_pt());
+            self.height = panel_height(
+                self.cfg.height,
+                screen.panel_max_height_pt(self.cfg.panel_placement),
+            );
             self.init_metrics();
             tx.resize_window_instant((self.width, self.height));
             if self.shown && self.pending_reveal {
@@ -1623,7 +1644,12 @@ impl Sash {
     /// Place the window on the pointer's display, flush with its physical top edge.
     /// Rune handles mixed backing scales and display origins.
     fn place(&self) {
-        if crate::macos::place_panel(self.screen.id, self.width as f64, self.height as f64) {
+        if crate::macos::place_panel(
+            self.screen.id,
+            self.width as f64,
+            self.height as f64,
+            self.cfg.panel_placement,
+        ) {
             return;
         }
         if let Some(window) = crate::window() {
@@ -1631,7 +1657,11 @@ impl Sash {
                 DisplayTarget::UnderPointer,
                 OverlayPlacement::Edge {
                     edge: ScreenEdge::Top,
-                    margin: 0.0,
+                    margin: if self.cfg.panel_placement == PanelPlacement::BelowMenuBar {
+                        self.screen.inset_pt()
+                    } else {
+                        0.0
+                    },
                     align: Align::Center,
                     inset: 0.0,
                 },
@@ -3237,7 +3267,7 @@ fn settings_page(s: &Sash) -> El {
     let t = s.theme();
     let accent = srgb(ACCENT, 1.0);
     let hair = Color::WHITE.alpha(0.08);
-    let full = s.screen.usable_height_pt().max(120.0);
+    let full = s.max_panel_height().max(120.0);
     let current = s
         .settings
         .height_drag
@@ -3282,6 +3312,13 @@ fn settings_page(s: &Sash) -> El {
         .child(separator("sep-width", hair))
         .child(setting_row(s, "set-display", "Display", display_control(s)))
         .child(separator("sep-display", hair))
+        .child(setting_row(
+            s,
+            "set-placement",
+            "Placement",
+            placement_control(s),
+        ))
+        .child(separator("sep-placement", hair))
         .child(setting_row(
             s,
             "set-opacity",
@@ -3786,6 +3823,33 @@ fn display_control(s: &Sash) -> El {
         .fill(Color::WHITE.alpha(0.07))
         .border(1.0, Color::WHITE.alpha(0.12))
         .on_press_tx(|s: &mut Sash, tx| s.cycle_display(tx))
+        .child(
+            text(label)
+                .font(s.small_style(500.0, 12.0))
+                .color(t.text)
+                .w_full()
+                .truncate(),
+        )
+}
+
+fn placement_control(s: &Sash) -> El {
+    let t = s.theme();
+    let label = match s.cfg.panel_placement {
+        PanelPlacement::ScreenTop => "Top of screen",
+        PanelPlacement::BelowMenuBar => "Below menu bar",
+    };
+    el().key("placement-button")
+        .role("button")
+        .label(format!("Placement: {label}"))
+        .h(27.0)
+        .w(240.0)
+        .px(11.0)
+        .radius(6.0)
+        .center()
+        .focusable(true)
+        .fill(Color::WHITE.alpha(0.07))
+        .border(1.0, Color::WHITE.alpha(0.12))
+        .on_press_tx(|s: &mut Sash, tx| s.cycle_placement(tx))
         .child(
             text(label)
                 .font(s.small_style(500.0, 12.0))

@@ -202,7 +202,7 @@ pub fn run() {
         .width
         .unwrap_or_else(|| screen.width_pt())
         .clamp(320.0, screen.width_pt());
-    let height = app::panel_height(cfg.height, screen.usable_height_pt());
+    let height = app::panel_height(cfg.height, screen.panel_max_height_pt(cfg.panel_placement));
     let px_w = (width * screen.scale as f32).round() as u32;
     let px_h = (height * screen.scale as f32).round() as u32;
     let x = ((screen.width_px as f32 - px_w as f32) / 2.0).round() as i32;
