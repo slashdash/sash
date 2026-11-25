@@ -9,15 +9,56 @@ use serde::{Deserialize, Serialize};
 /// once (the panel now defaults to filling the space above the Dock).
 const LEGACY_DEFAULT_HEIGHT: f32 = 420.0;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TabHighlight {
+    Dot,
+    Underline,
+    #[default]
+    WholeTab,
+    Text,
+}
+
+impl TabHighlight {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Dot => Self::Underline,
+            Self::Underline => Self::WholeTab,
+            Self::WholeTab => Self::Text,
+            Self::Text => Self::Dot,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Dot => "Dot",
+            Self::Underline => "Underline",
+            Self::WholeTab => "Whole tab",
+            Self::Text => "Text",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     /// Global shortcut that drops the panel down. Needs ⌘, ⌃ or ⌥.
     pub hotkey: String,
-    /// Panel height in points. `null` fills the screen from the menu bar to the Dock.
+    /// Panel height in points. `null` fills the screen from its physical top to the Dock.
     pub height: Option<f32>,
     /// Panel width in points. `null` means the full display width.
     pub width: Option<f32>,
+    /// Display to open on, counted from 1: the menu-bar display first, then the
+    /// rest left to right. `null` follows the pointer. Falls back to the menu-bar
+    /// display while the chosen one is unplugged.
+    pub display: Option<u32>,
+    /// Put the tab strip under the terminal instead of above it.
+    pub tabs_at_bottom: bool,
+    /// Divide the available strip width equally between tabs instead of sizing
+    /// each tab to its title (with a 120 pt minimum).
+    pub tabs_fill_width: bool,
+    /// How the active tab is marked.
+    pub tab_highlight: TabHighlight,
     /// Terminal font family, or a comma-separated fallback list. `null` uses
     /// the system monospaced font.
     pub font_family: Option<String>,
@@ -51,6 +92,9 @@ pub struct Config {
     pub confirm_close: bool,
     /// Reopen the last session's tabs and directories on launch.
     pub restore_session: bool,
+    /// The first-run card has been dismissed. Testers' bug reports quote the
+    /// build, so the card only ever appears once.
+    pub welcome_seen: bool,
 }
 
 impl Default for Config {
@@ -59,6 +103,10 @@ impl Default for Config {
             hotkey: "cmd+shift+space".into(),
             height: None,
             width: None,
+            display: None,
+            tabs_at_bottom: false,
+            tabs_fill_width: false,
+            tab_highlight: TabHighlight::WholeTab,
             font_family: None,
             font_size: 13.0,
             opacity: 0.96,
@@ -75,6 +123,7 @@ impl Default for Config {
             desktop_notifications: true,
             confirm_close: true,
             restore_session: true,
+            welcome_seen: false,
         }
     }
 }
@@ -124,6 +173,8 @@ impl Config {
         // terminal impossibly wide or the frame loop wake forever.
         config.font_size = config.font_size.clamp(6.0, 72.0);
         config.animation_ms = config.animation_ms.clamp(0, 2_000);
+        // Display numbers are 1-based; 0 behaves like "follow the pointer".
+        config.display = config.display.filter(|display| *display > 0);
         Ok(config)
     }
 
@@ -188,6 +239,12 @@ pub struct Session {
 #[serde(default)]
 pub struct SessionTab {
     pub cwd: Option<PathBuf>,
+    /// A name set from the tab menu; absent keeps the shell's own title.
+    pub name: Option<String>,
+    /// Index into the tab colour palette; absent uses the theme's default.
+    pub color: Option<u8>,
+    /// A pinned tab refuses to close until it is unpinned.
+    pub pinned: bool,
 }
 
 impl Session {
@@ -226,8 +283,12 @@ mod tests {
         assert!(Config::default().focus_on_open);
         assert!(Config::default().hide_on_blur);
         assert_eq!(Config::default().font_family, None);
+        assert!(!Config::default().tabs_at_bottom);
+        assert!(!Config::default().tabs_fill_width);
+        assert_eq!(Config::default().tab_highlight, TabHighlight::WholeTab);
         assert!(Config::default().confirm_close);
         assert!(Config::default().restore_session);
+        assert!(!Config::default().welcome_seen);
         assert_eq!(Config::default().scrollback_lines, Some(10_000));
         assert!(!Config::default().copy_on_select);
         assert!(!Config::default().clipboard_write);
@@ -249,7 +310,52 @@ mod tests {
         assert!(config.desktop_notifications);
         assert!(config.confirm_close);
         assert!(config.restore_session);
+        assert!(!config.welcome_seen);
+        assert!(!config.tabs_at_bottom);
+        assert!(!config.tabs_fill_width);
+        assert_eq!(config.tab_highlight, TabHighlight::WholeTab);
         assert_eq!(config.font_family, None);
+    }
+
+    #[test]
+    fn a_pinned_display_round_trips_and_zero_means_follow_the_pointer() {
+        let config = Config { display: Some(2), ..Config::default() };
+        let text = serde_json::to_string(&config).unwrap();
+        let back: Config = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.display, Some(2));
+
+        let config = Config::parse(r#"{"display":0}"#).unwrap();
+        assert_eq!(config.display, None);
+        assert_eq!(Config::default().display, None);
+    }
+
+    #[test]
+    fn a_bottom_tab_strip_round_trips() {
+        let config = Config {
+            tabs_at_bottom: true,
+            ..Config::default()
+        };
+        let text = serde_json::to_string(&config).unwrap();
+        let back: Config = serde_json::from_str(&text).unwrap();
+        assert!(back.tabs_at_bottom);
+    }
+
+    #[test]
+    fn tab_width_and_highlight_settings_round_trip() {
+        let config = Config {
+            tabs_fill_width: true,
+            tab_highlight: TabHighlight::Underline,
+            ..Config::default()
+        };
+        let text = serde_json::to_string(&config).unwrap();
+        assert!(text.contains("\"tab_highlight\":\"underline\""));
+        let back: Config = serde_json::from_str(&text).unwrap();
+        assert!(back.tabs_fill_width);
+        assert_eq!(back.tab_highlight, TabHighlight::Underline);
+        assert_eq!(TabHighlight::Dot.next(), TabHighlight::Underline);
+        assert_eq!(TabHighlight::Underline.next(), TabHighlight::WholeTab);
+        assert_eq!(TabHighlight::WholeTab.next(), TabHighlight::Text);
+        assert_eq!(TabHighlight::Text.next(), TabHighlight::Dot);
     }
 
     #[test]
@@ -273,6 +379,7 @@ mod tests {
             desktop_notifications: false,
             confirm_close: false,
             restore_session: false,
+            welcome_seen: true,
             ..Config::default()
         };
         let text = serde_json::to_string(&config).unwrap();
@@ -284,6 +391,7 @@ mod tests {
         assert!(!back.desktop_notifications);
         assert!(!back.confirm_close);
         assert!(!back.restore_session);
+        assert!(back.welcome_seen);
     }
 
     #[test]
@@ -356,15 +464,21 @@ mod tests {
             tabs: vec![
                 SessionTab {
                     cwd: Some(PathBuf::from("/tmp")),
+                    name: Some("build".into()),
+                    color: Some(3),
+                    pinned: true,
                 },
-                SessionTab { cwd: None },
+                SessionTab { cwd: None, name: None, color: None, pinned: false },
             ],
             active: 1,
         };
         let text = serde_json::to_string(&session).unwrap();
         let back: Session = serde_json::from_str(&text).unwrap();
         assert_eq!(back.tabs.len(), 2);
+        assert_eq!(back.tabs[0].name.as_deref(), Some("build"));
         assert_eq!(back.tabs[0].cwd.as_deref(), Some(Path::new("/tmp")));
+        assert_eq!(back.tabs[0].color, Some(3));
+        assert!(back.tabs[0].pinned);
         assert_eq!(back.tabs[1].cwd, None);
         assert_eq!(back.active, 1);
     }
