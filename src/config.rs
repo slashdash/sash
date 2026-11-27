@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::split::Layout;
+
 /// Panel height the previous release wrote by default. Config files saved before the
 /// settings screen have no `always_on_top` key, so this value is migrated to "full height"
 /// once (the panel now defaults to filling the space above the Dock).
@@ -53,6 +55,76 @@ pub enum PanelPlacement {
     BelowMenuBar,
 }
 
+/// What a terminal bell does. Visual is the old behaviour and the default.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BellMode {
+    /// Flash the tab chip, and mark an inactive tab unread.
+    #[default]
+    Visual,
+    /// Ignore the bell.
+    Off,
+    /// Play the system alert sound.
+    Audible,
+    /// Flash and play the system alert both.
+    Both,
+}
+
+impl BellMode {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Visual => Self::Off,
+            Self::Off => Self::Audible,
+            Self::Audible => Self::Both,
+            Self::Both => Self::Visual,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Visual => "Visual",
+            Self::Off => "Off",
+            Self::Audible => "Audible",
+            Self::Both => "Visual + audible",
+        }
+    }
+
+    pub fn visual(self) -> bool {
+        matches!(self, Self::Visual | Self::Both)
+    }
+
+    pub fn audible(self) -> bool {
+        matches!(self, Self::Audible | Self::Both)
+    }
+}
+
+/// What a left click on the menu-bar ghost does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MenuBarClick {
+    /// Toggle the panel; the menu stays on right click.
+    #[default]
+    Toggle,
+    /// Open the menu, as menu-bar items normally do.
+    Menu,
+}
+
+impl MenuBarClick {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Toggle => Self::Menu,
+            Self::Menu => Self::Toggle,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Toggle => "Toggle panel",
+            Self::Menu => "Open menu",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -68,6 +140,8 @@ pub struct Config {
     pub display: Option<u32>,
     /// Cover the menu bar at the physical top edge, or hang directly beneath it.
     pub panel_placement: PanelPlacement,
+    /// Whether a left click on the menu-bar ghost toggles the panel or opens the menu.
+    pub menu_bar_click: MenuBarClick,
     /// Put the tab strip under the terminal instead of above it.
     pub tabs_at_bottom: bool,
     /// Divide the available strip width equally between tabs instead of sizing
@@ -84,6 +158,8 @@ pub struct Config {
     pub opacity: f32,
     /// Slide animation length in milliseconds.
     pub animation_ms: u64,
+    /// What a terminal bell does.
+    pub bell: BellMode,
     /// Shell to run. `null` uses `$SHELL`.
     pub shell: Option<String>,
     /// Hide the panel when Escape is pressed (off by default: vim needs Escape).
@@ -121,6 +197,7 @@ impl Default for Config {
             width: None,
             display: None,
             panel_placement: PanelPlacement::ScreenTop,
+            menu_bar_click: MenuBarClick::Toggle,
             tabs_at_bottom: false,
             tabs_fill_width: false,
             tab_highlight: TabHighlight::WholeTab,
@@ -128,6 +205,7 @@ impl Default for Config {
             font_size: 13.0,
             opacity: 0.96,
             animation_ms: 140,
+            bell: BellMode::Visual,
             shell: None,
             hide_on_escape: false,
             always_on_top: true,
@@ -255,6 +333,7 @@ pub struct Session {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SessionTab {
+    /// The focused pane's directory. Older sessions only have this one field.
     pub cwd: Option<PathBuf>,
     /// A name set from the tab menu; absent keeps the shell's own title.
     pub name: Option<String>,
@@ -262,6 +341,19 @@ pub struct SessionTab {
     pub color: Option<u8>,
     /// A pinned tab refuses to close until it is unpinned.
     pub pinned: bool,
+    /// Every pane in tree-index order. Empty means the legacy single `cwd` pane.
+    pub panes: Vec<SessionPane>,
+    /// The split tree, if the tab had more than one pane.
+    pub layout: Option<Layout>,
+    /// The tree index that had the keyboard.
+    pub focus: usize,
+}
+
+/// One pane's restorable state: where its shell was sitting.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SessionPane {
+    pub cwd: Option<PathBuf>,
 }
 
 impl Session {
@@ -307,6 +399,8 @@ mod tests {
         assert!(Config::default().restore_session);
         assert!(!Config::default().welcome_seen);
         assert_eq!(Config::default().panel_placement, PanelPlacement::ScreenTop);
+        assert_eq!(Config::default().menu_bar_click, MenuBarClick::Toggle);
+        assert_eq!(Config::default().bell, BellMode::Visual);
         assert_eq!(Config::default().scrollback_lines, Some(10_000));
         assert!(!Config::default().copy_on_select);
         assert!(!Config::default().clipboard_write);
@@ -330,6 +424,8 @@ mod tests {
         assert!(config.restore_session);
         assert!(!config.welcome_seen);
         assert_eq!(config.panel_placement, PanelPlacement::ScreenTop);
+        assert_eq!(config.menu_bar_click, MenuBarClick::Toggle);
+        assert_eq!(config.bell, BellMode::Visual);
         assert!(!config.tabs_at_bottom);
         assert!(!config.tabs_fill_width);
         assert_eq!(config.tab_highlight, TabHighlight::WholeTab);
@@ -361,6 +457,25 @@ mod tests {
         assert!(text.contains("\"panel_placement\":\"below_menu_bar\""));
         let back: Config = serde_json::from_str(&text).unwrap();
         assert_eq!(back.panel_placement, PanelPlacement::BelowMenuBar);
+    }
+
+    #[test]
+    fn bell_and_menu_bar_click_round_trip() {
+        let config = Config {
+            bell: BellMode::Both,
+            menu_bar_click: MenuBarClick::Menu,
+            ..Config::default()
+        };
+        let text = serde_json::to_string(&config).unwrap();
+        assert!(text.contains("\"bell\":\"both\""));
+        assert!(text.contains("\"menu_bar_click\":\"menu\""));
+        let back: Config = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.bell, BellMode::Both);
+        assert_eq!(back.menu_bar_click, MenuBarClick::Menu);
+        assert_eq!(BellMode::Visual.next(), BellMode::Off);
+        assert_eq!(BellMode::Off.next(), BellMode::Audible);
+        assert_eq!(BellMode::Audible.next(), BellMode::Both);
+        assert_eq!(BellMode::Both.next(), BellMode::Visual);
     }
 
     #[test]
@@ -499,12 +614,26 @@ mod tests {
                     name: Some("build".into()),
                     color: Some(3),
                     pinned: true,
+                    ..Default::default()
                 },
                 SessionTab {
                     cwd: None,
                     name: None,
                     color: None,
                     pinned: false,
+                    panes: vec![
+                        SessionPane {
+                            cwd: Some(PathBuf::from("/tmp")),
+                        },
+                        SessionPane { cwd: None },
+                    ],
+                    layout: Some(Layout::Split {
+                        dir: crate::split::Dir::Right,
+                        ratio: 0.4,
+                        first: Box::new(Layout::Leaf { index: 0 }),
+                        second: Box::new(Layout::Leaf { index: 1 }),
+                    }),
+                    focus: 1,
                 },
             ],
             active: 1,
@@ -517,7 +646,20 @@ mod tests {
         assert_eq!(back.tabs[0].color, Some(3));
         assert!(back.tabs[0].pinned);
         assert_eq!(back.tabs[1].cwd, None);
+        assert_eq!(back.tabs[1].panes.len(), 2);
+        assert_eq!(back.tabs[1].focus, 1);
+        assert_eq!(back.tabs[1].layout, session.tabs[1].layout);
         assert_eq!(back.active, 1);
+    }
+
+    #[test]
+    fn an_old_session_without_splits_still_loads() {
+        let session: Session =
+            serde_json::from_str(r#"{"tabs":[{"cwd":"/tmp","name":"old"}],"active":0}"#).unwrap();
+        assert_eq!(session.tabs[0].cwd.as_deref(), Some(Path::new("/tmp")));
+        assert!(session.tabs[0].panes.is_empty());
+        assert!(session.tabs[0].layout.is_none());
+        assert_eq!(session.tabs[0].focus, 0);
     }
 
     #[test]

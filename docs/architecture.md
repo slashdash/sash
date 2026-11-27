@@ -20,10 +20,12 @@ libghostty is extended, not duplicated here.
 | `src/term/cwd.rs` | `proc_pidinfo` fallback for a shell's live directory (zsh emits no OSC 7 by default) |
 | `src/cell_glyphs.rs` | cell-grid rectangles for block elements and box drawing, so TUI logos, meters and frames tile without seams |
 | `src/selection.rs` | drag/word/line selection over the grid, copy text with trailing-space trimming |
-| `src/split.rs` | pane split tree: insert, remove, focus order and rectangle layout; no terminal state |
+| `src/split.rs` | pane split tree: insert, remove, focus order, draggable ratios, serialisable layouts and rectangle layout; no terminal state |
 | `src/textops.rs` | link detection, shell quoting, bracketed-paste shaping, wheel-pixel to row accumulation |
 | `src/app.rs` | `Sash` state, tabs and panes, selection, find, palette, rename/menu, confirm and paste UI, effects, session save/restore, display placement, slide animation clock, the Rune view (tab bar + pane grids + tabbed settings page) |
-| `src/tray.rs` | `NSStatusItem` through `tray-icon`, with a generated ghost template glyph |
+| `src/tray.rs` | `NSStatusItem` through `tray-icon`, with a generated ghost template glyph; left-click can toggle the panel and right-click opens the menu |
+| `src/integration.rs` | optional OSC 133 shell snippets and the guarded rc-file installer for zsh, bash and fish |
+| `src/ipc.rs` | `sash open/run/toggle/settings/new-tab` client and the token-guarded distributed-notification listener |
 | `src/macos.rs` | `NSScreen` geometry: menu-bar inset, panel height above the Dock, display size, backing scale, numbered display list, the screen under the pointer, display-change notifications, and physical-top placement and overlay level of the panel's `NSPanel` |
 | `src/lib.rs` | AppSpec wiring: panel options, global shortcut, poll loop, key routing |
 

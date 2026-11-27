@@ -4,7 +4,7 @@
 //! The menu-bar extra: a template icon plus Show / New Tab / Quit.
 
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
+use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 /// Forward menu activations into app state. The handler runs on AppKit's
 /// thread, and a hidden panel has no frame clock, so it must not wait for the
@@ -15,6 +15,25 @@ pub fn forward_events() {
         let id = event.id().0.clone();
         if let Some(handle) = crate::handle() {
             handle.update(move |sash, _tx| sash.handle_tray(&id));
+        }
+    }));
+    // With the menu on left click disabled, the status item reports the click
+    // here; right click still opens the menu natively.
+    TrayIconEvent::set_event_handler(Some(|event: TrayIconEvent| {
+        let TrayIconEvent::Click {
+            button: MouseButton::Left,
+            button_state: MouseButtonState::Up,
+            ..
+        } = event
+        else {
+            return;
+        };
+        if let Some(handle) = crate::handle() {
+            handle.update(|sash, _tx| {
+                if sash.cfg.menu_bar_click == crate::config::MenuBarClick::Toggle {
+                    sash.handle_tray("toggle");
+                }
+            });
         }
     }));
 }

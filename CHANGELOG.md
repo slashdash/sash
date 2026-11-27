@@ -6,6 +6,18 @@ All notable changes to Sash are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Split panes are resizable by dragging their divider and zoomable with
+  `⌘⇧Return`; split trees, ratios and focus are restored across launches.
+- Configurable bell: `off`, `visual`, `audible` or `both` (default `visual`).
+- `menu_bar_click` setting: left-click toggles the panel (default) or opens the
+  existing menu; right-click always opens the menu.
+- Shell-integration installer for zsh, bash and fish, which appends guarded
+  OSC 133 hooks for prompt jumps, command-finished notices and cwd tracking.
+- Command-line client: `sash open`, `run`, `new-tab`, `toggle` and `settings`
+  reach the running instance through a token-guarded distributed notification.
+
 ### Changed
 
 - Build libghostty-vt 1.0.2 from the pinned stable source with Zig, replacing

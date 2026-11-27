@@ -27,7 +27,9 @@ Rune draws the frame; libghostty-vt owns every byte of terminal state.
 - Global hotkey, `⌘⇧Space` by default, registered through Carbon (no
   Accessibility permission). A conflict names the app that owns the chord.
 - Lives in the menu bar as a ghost hanging from a ceiling bar: Show/Hide, New
-  Tab, Settings, Quit, and the exact build number.
+  Tab, Settings, Quit, and the exact build number. Left-click toggles the panel
+  and right-click opens the menu, or reverse that in Settings → Panel →
+  Menu-bar click.
 - Drag the bottom edge to resize, or `⌘⇧M` to fill the space above the Dock
   and back.
 - Follows the pointer across displays, or stays on a chosen display and returns
@@ -57,8 +59,9 @@ Rune draws the frame; libghostty-vt owns every byte of terminal state.
 - `⌘D` splits right, `⌘⇧D` splits down, `⌘[` / `⌘]` move the keyboard
   between panes, and `⌘W` closes the focused pane.
 - Each pane owns its own libghostty terminal and pty; Sash owns only the split
-  tree, geometry and focus.
-- Split layout is not saved across launches yet.
+  tree, geometry and focus. Drag the divider between two panes to change the
+  split, and press `⌘⇧Return` to zoom the focused pane and back.
+- Split trees, ratios and the focused pane come back after a relaunch.
 
 ### Terminal
 
@@ -77,6 +80,12 @@ Rune draws the frame; libghostty-vt owns every byte of terminal state.
   Cursor).
 - OSC 9 / OSC 777 messages and command-finished notices reach Notification
   Center when the panel is not focused.
+- The bell can be off, visual, audible or both (Settings → Terminal → Bell);
+  visual is the default.
+- Settings → Terminal → Shell integration appends guarded OSC 133 hooks to
+  zsh, bash or fish, which turns on prompt jumps, command-finished notices and
+  accurate working directories. It edits your rc file only when you press
+  Install, and the script itself lives under the config directory.
 
 ### Safety
 
@@ -107,7 +116,10 @@ report. Logs go to `~/Library/Logs/Sash/sash.log`.
 ### Uninstall
 
 Quit Sash from the ghost menu, drag it to the Trash, then optionally remove
-`~/.config/sash` and `~/Library/Logs/Sash`.
+`~/.config/sash` and `~/Library/Logs/Sash`. If you installed shell integration,
+remove the marked `sash shell integration` block from your `.zshrc`,
+`.bash_profile` or `config.fish`; the snippet itself is under the config
+directory.
 
 ## Build from source
 
@@ -133,6 +145,27 @@ scripts/bundle.sh --universal  # arm64 + x86_64
 scripts/package.sh             # dist/Sash-<version>-<date>.dmg
 ```
 
+## Command line
+
+The app binary doubles as a small client. With no arguments it starts the
+menu-bar app; with a command it talks to the running instance and exits, so it
+works from Finder, editors, scripts and other terminals:
+
+```sh
+SASH="$HOME/Applications/Sash.app/Contents/MacOS/sash"
+"$SASH" open ~/src/project   # new tab in that directory
+"$SASH" .                    # shorthand for open the current directory
+"$SASH" run make test        # new tab that runs the command at its first prompt
+"$SASH" new-tab ~/src/other
+"$SASH" toggle
+"$SASH" settings
+```
+
+`open` accepts a directory or a file (the file opens in its parent directory).
+The commands travel over a distributed notification guarded by a token in
+`~/.config/sash/ipc-token`; there is no listening port. A relative path is
+resolved against the caller's directory before it is sent.
+
 ## Keyboard shortcuts
 
 | Shortcut | Action |
@@ -149,6 +182,7 @@ scripts/package.sh             # dist/Sash-<version>-<date>.dmg
 | `⌘⇧[` / `⌘⇧]` | Previous / next tab |
 | `⌃Tab` / `⌃⇧Tab` | Cycle tabs |
 | `⌘D` / `⌘⇧D` | Split right / down |
+| `⌘⇧Return` | Zoom the focused pane |
 | `⌘[` / `⌘]` | Focus previous / next pane |
 | `⌘W` | Close pane |
 | `⌘⇧M` | Maximize or restore the panel |
@@ -173,6 +207,7 @@ edits it live; the file is read at launch. The full default:
   "width": null,
   "display": null,
   "panel_placement": "screen_top",
+  "menu_bar_click": "toggle",
   "tabs_at_bottom": false,
   "tabs_fill_width": false,
   "tab_highlight": "whole_tab",
@@ -180,6 +215,7 @@ edits it live; the file is read at launch. The full default:
   "font_size": 13.0,
   "opacity": 0.96,
   "animation_ms": 140,
+  "bell": "visual",
   "shell": null,
   "hide_on_escape": false,
   "always_on_top": true,
@@ -203,6 +239,7 @@ edits it live; the file is read at launch. The full default:
 | `width` | `null` | Panel width in points; `null` is the full display |
 | `display` | `null` | 1-based display number; `null` follows the pointer |
 | `panel_placement` | `"screen_top"` | `screen_top` covers the menu bar; `below_menu_bar` starts under it |
+| `menu_bar_click` | `"toggle"` | `toggle` left-click shows/hides the panel; `menu` opens the menu |
 | `tabs_at_bottom` | `false` | Put the tab strip below the grid |
 | `tabs_fill_width` | `false` | Divide the strip equally instead of title-sized tabs |
 | `tab_highlight` | `"whole_tab"` | `dot`, `underline`, `whole_tab` or `text` |
@@ -210,6 +247,7 @@ edits it live; the file is read at launch. The full default:
 | `font_size` | `13.0` | Terminal font size in points |
 | `opacity` | `0.96` | Background opacity, 0.0–1.0 |
 | `animation_ms` | `140` | Slide animation length |
+| `bell` | `"visual"` | `off`, `visual`, `audible` or `both` |
 | `shell` | `null` | Shell to run; `null` uses `$SHELL` |
 | `hide_on_escape` | `false` | Hide the panel on Escape (vim needs Escape) |
 | `always_on_top` | `true` | Also raise the panel above menu-bar status items |
@@ -234,6 +272,11 @@ Details that do not fit a table:
   display and is reclaimed when it returns.
 - **`panel_placement`.** `screen_top` covers the menu bar; `below_menu_bar`
   leaves it visible, and Full height shrinks by the menu bar's height.
+- **`menu_bar_click`.** The default `toggle` makes left-click show/hide the
+  panel and leaves the menu on right-click. `menu` restores the menu-bar
+  convention, so left-click opens the menu too.
+- **`bell`.** Off ignores bells; visual flashes the tab chip; audible plays the
+  system alert; both does both. Inactive tabs still get the unread ring.
 - **`tabs_fill_width`.** Off keeps title-sized tabs with a 120 pt minimum.
 - **Titles.** Directory-only titles show the folder name; a manual name wins.
 - **`clipboard_write`.** Writes are capped at 1 MiB and stripped of control
@@ -288,10 +331,10 @@ are recorded in [`docs/adr/`](docs/adr/).
 ## Limitations
 
 - macOS only; the panel geometry and tray are AppKit-specific.
-- Shell integration is not installed automatically. Prompt jumps and
-  command-finished notices need the shell to emit OSC 133 (Ghostty's zsh/fish/bash
-  integration snippets do).
-- No drag-and-drop file paste or scrollback export. Split layout is not restored.
+- Shell integration is opt-in. Settings → Terminal → Shell integration installs
+  OSC 133 hooks for zsh, bash or fish; without them, prompt jumps and
+  command-finished notices stay off.
+- No drag-and-drop file paste or scrollback export.
 - A resolution change while the panel is already down waits for the next show.
 - libghostty-vt is the terminal core, not the full Ghostty renderer: ligatures,
   images and the GPU glyph pipeline are Rune's and Sash's own work.

@@ -7,6 +7,8 @@ pub mod app;
 pub mod cell_glyphs;
 pub mod config;
 pub mod ffi;
+pub mod integration;
+pub mod ipc;
 pub mod macos;
 pub mod selection;
 pub mod split;
@@ -117,9 +119,14 @@ fn poll(s: &mut Sash, seconds: f64, tx: &mut Tx) -> bool {
 
 fn setup(s: &mut Sash, waker: rune::Waker) {
     macos::watch_display_changes(waker);
+    if let Err(e) = ipc::ensure_token() {
+        eprintln!("sash: external commands disabled: {e}");
+    }
+    ipc::listen();
     if s.tray.is_none() && std::env::var_os("SASH_NO_TRAY").is_none() {
         tray::forward_events();
         s.tray = tray::build();
+        s.apply_menu_bar_click();
         if s.tray.is_some() {
             eprintln!("sash: menu-bar item ready (hotkey {})", s.cfg.hotkey);
         }
@@ -194,6 +201,13 @@ fn init_log() {
 }
 
 pub fn run() {
+    // A CLI invocation talks to the instance that is already running and exits.
+    // Anything starting with a dash belongs to the app (Rune's snapshot and
+    // script tooling); Finder's legacy `-psn_` argument means "launch" too.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if ipc::wants_cli(&args) {
+        std::process::exit(ipc::cli(&args));
+    }
     init_log();
     let cfg = Config::load();
     let screen = macos::preferred_screen(cfg.display).unwrap_or_default();

@@ -6,16 +6,50 @@
 //! The tree only tracks which pane index sits where. Terminal state and the
 //! pane list itself live in the caller, in a parallel `Vec`.
 
+use serde::{Deserialize, Serialize};
+
 /// The space in points kept between two split children.
 pub const GAP: f32 = 1.0;
 
+/// The width of the grab strip centred on a split, in points.
+const HIT: f32 = 7.0;
+
 /// The axis a split divides along.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Dir {
     /// Side by side, with the first child on the left.
     Right,
     /// Stacked, with the first child on top.
     Down,
+}
+
+/// A serialisable copy of the tree, so a tab's splits survive a relaunch.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Layout {
+    Leaf {
+        index: usize,
+    },
+    Split {
+        dir: Dir,
+        ratio: f32,
+        first: Box<Layout>,
+        second: Box<Layout>,
+    },
+}
+
+/// A split the pointer can drag: where its divider is, and the ratio it owns.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Boundary {
+    /// Child choices that reach this split node from the root.
+    pub path: Vec<bool>,
+    pub dir: Dir,
+    /// The length the ratio divides, excluding the gap.
+    pub span: f32,
+    pub ratio: f32,
+    /// The grab strip, in the tree area's coordinates.
+    pub rect: Rect,
 }
 
 /// A rectangle in points, measured from the area's top-left corner.
@@ -127,6 +161,62 @@ impl Tree {
         layout_at(&self.root, clean(area), gap, &mut out);
         out
     }
+
+    /// The draggable divider of every split, parent before children.
+    pub fn boundaries(&self, area: Rect, gap: f32) -> Vec<Boundary> {
+        let mut out = Vec::new();
+        boundaries_at(&self.root, clean(area), gap, &mut Vec::new(), &mut out);
+        out
+    }
+
+    /// Move the split at `path` to `ratio`. `false` when the path does not
+    /// name a split node.
+    pub fn set_ratio_at(&mut self, path: &[bool], ratio: f32) -> bool {
+        let mut node = &mut self.root;
+        for right in path {
+            let Node::Split { first, second, .. } = node else {
+                return false;
+            };
+            node = if *right { second } else { first };
+        }
+        let Node::Split { ratio: at, .. } = node else {
+            return false;
+        };
+        *at = if ratio.is_finite() {
+            ratio.clamp(0.1, 0.9)
+        } else {
+            0.5
+        };
+        true
+    }
+
+    /// A serialisable copy of the tree for the saved session.
+    pub fn to_layout(&self) -> Layout {
+        layout_from(&self.root)
+    }
+
+    /// Rebuild a tree only when `layout` names every pane exactly once.
+    pub fn from_layout(layout: &Layout, panes: usize) -> Option<Self> {
+        if panes == 0 {
+            return None;
+        }
+        let mut seen = vec![false; panes];
+        let root = node_from_layout(layout, &mut seen)?;
+        seen.iter().all(|seen| *seen).then_some(Self { root })
+    }
+
+    /// A horizontal chain of equal-width panes, for a session without a usable
+    /// layout. Every pane gets a turn instead of leaving shells unreachable.
+    pub fn row(count: usize) -> Self {
+        let mut tree = Self::new(0);
+        let count = count.max(1);
+        for index in 1..count {
+            tree.split(index - 1, index, Dir::Right);
+            // The rightmost remaining share keeps dividing evenly: 1/n, 1/(n-1), …
+            tree.set_ratio_at(&vec![true; index - 1], 1.0 / (count - index + 1) as f32);
+        }
+        tree
+    }
 }
 
 fn count(node: &Node) -> usize {
@@ -220,6 +310,100 @@ fn layout_at(node: &Node, area: Rect, gap: f32, out: &mut Vec<(usize, Rect)>) {
             layout_at(first, a, gap, out);
             layout_at(second, b, gap, out);
         }
+    }
+}
+
+fn boundaries_at(node: &Node, area: Rect, gap: f32, path: &mut Vec<bool>, out: &mut Vec<Boundary>) {
+    let Node::Split {
+        dir,
+        ratio,
+        first,
+        second,
+    } = node
+    else {
+        return;
+    };
+    let (a, b) = split_rect(area, *dir, *ratio, gap);
+    let (span, rect) = match dir {
+        Dir::Right => (
+            (area.w - gap).max(0.0),
+            Rect {
+                x: a.x + a.w - HIT / 2.0,
+                y: area.y,
+                w: HIT,
+                h: area.h,
+            },
+        ),
+        Dir::Down => (
+            (area.h - gap).max(0.0),
+            Rect {
+                x: area.x,
+                y: a.y + a.h - HIT / 2.0,
+                w: area.w,
+                h: HIT,
+            },
+        ),
+    };
+    out.push(Boundary {
+        path: path.clone(),
+        dir: *dir,
+        span,
+        ratio: if ratio.is_finite() {
+            ratio.clamp(0.1, 0.9)
+        } else {
+            0.5
+        },
+        rect,
+    });
+    path.push(false);
+    boundaries_at(first, a, gap, path, out);
+    *path.last_mut().unwrap() = true;
+    boundaries_at(second, b, gap, path, out);
+    path.pop();
+}
+
+fn layout_from(node: &Node) -> Layout {
+    match node {
+        Node::Leaf(index) => Layout::Leaf { index: *index },
+        Node::Split {
+            dir,
+            ratio,
+            first,
+            second,
+        } => Layout::Split {
+            dir: *dir,
+            ratio: *ratio,
+            first: Box::new(layout_from(first)),
+            second: Box::new(layout_from(second)),
+        },
+    }
+}
+
+fn node_from_layout(layout: &Layout, seen: &mut [bool]) -> Option<Node> {
+    match layout {
+        Layout::Leaf { index } => {
+            let slot = seen.get_mut(*index)?;
+            if *slot {
+                return None;
+            }
+            *slot = true;
+            Some(Node::Leaf(*index))
+        }
+        Layout::Split {
+            dir,
+            ratio,
+            first,
+            second,
+        } => Some(Node::Split {
+            dir: *dir,
+            ratio: if ratio.is_finite() {
+                ratio.clamp(0.1, 0.9)
+            } else {
+                0.5
+            },
+            first: Box::new(node_from_layout(first, seen)?),
+            second: Box::new(node_from_layout(second, seen)?),
+        }),
     }
 }
 
@@ -390,6 +574,83 @@ mod tests {
         // The left pane keeps the full height beside the column.
         assert!(near(left.h, area().h));
         assert!(near(top.x - (left.x + left.w), GAP));
+    }
+
+    #[test]
+    fn a_dragged_ratio_moves_the_divider_and_is_clamped() {
+        let mut tree = Tree::new(0);
+        tree.split(0, 1, Dir::Right);
+        let boundaries = tree.boundaries(area(), GAP);
+        assert_eq!(boundaries.len(), 1);
+        assert_eq!(boundaries[0].path, Vec::<bool>::new());
+        assert_eq!(boundaries[0].dir, Dir::Right);
+        assert!(near(boundaries[0].rect.x, 209.5 - HIT / 2.0));
+
+        assert!(tree.set_ratio_at(&[], 0.25));
+        let layout = tree.layout(area(), GAP);
+        assert!(near(rect_of(&layout, 0).w, 399.0 * 0.25));
+        assert!(tree.set_ratio_at(&[], 4.0));
+        assert!(near(rect_of(&tree.layout(area(), GAP), 0).w, 399.0 * 0.9));
+        assert!(tree.set_ratio_at(&[], -1.0));
+        assert!(near(rect_of(&tree.layout(area(), GAP), 0).w, 399.0 * 0.1));
+        assert!(!tree.set_ratio_at(&[false], 0.5));
+    }
+
+    #[test]
+    fn nested_boundaries_carry_their_path() {
+        let mut tree = Tree::new(0);
+        tree.split(0, 1, Dir::Right);
+        tree.split(1, 2, Dir::Down);
+        let boundaries = tree.boundaries(area(), GAP);
+        assert_eq!(boundaries.len(), 2);
+        assert_eq!(boundaries[0].path, Vec::<bool>::new());
+        assert_eq!(boundaries[1].path, vec![true]);
+        assert_eq!(boundaries[1].dir, Dir::Down);
+
+        assert!(tree.set_ratio_at(&[true], 0.75));
+        let layout = tree.layout(area(), GAP);
+        assert!(near(rect_of(&layout, 1).h, 299.0 * 0.75));
+    }
+
+    #[test]
+    fn a_layout_round_trips_and_rejects_bad_indices() {
+        let mut tree = Tree::new(0);
+        tree.split(0, 1, Dir::Right);
+        tree.split(1, 2, Dir::Down);
+        tree.set_ratio_at(&[true], 0.7);
+        let layout = tree.to_layout();
+
+        let back = Tree::from_layout(&layout, 3).expect("valid layout");
+        assert_eq!(back.leaves(), vec![0, 1, 2]);
+        assert!(near(rect_of(&back.layout(area(), GAP), 1).h, 299.0 * 0.7));
+
+        assert!(Tree::from_layout(&Layout::Leaf { index: 3 }, 3).is_none());
+        let duplicate = Layout::Split {
+            dir: Dir::Right,
+            ratio: 0.5,
+            first: Box::new(Layout::Leaf { index: 0 }),
+            second: Box::new(Layout::Leaf { index: 0 }),
+        };
+        assert!(Tree::from_layout(&duplicate, 2).is_none());
+        let missing = Layout::Split {
+            dir: Dir::Right,
+            ratio: 0.5,
+            first: Box::new(Layout::Leaf { index: 0 }),
+            second: Box::new(Layout::Leaf { index: 1 }),
+        };
+        assert!(Tree::from_layout(&missing, 3).is_none());
+    }
+
+    #[test]
+    fn a_row_keeps_every_pane_reachable_and_evenly_sized() {
+        let tree = Tree::row(4);
+        assert_eq!(tree.leaves(), vec![0, 1, 2, 3]);
+        assert_eq!(tree.boundaries(area(), GAP).len(), 3);
+        let layout = tree.layout(area(), GAP);
+        let widths: Vec<f32> = (0..4).map(|leaf| rect_of(&layout, leaf).w).collect();
+        for width in &widths {
+            assert!(*width > 96.0, "{widths:?}");
+        }
     }
 
     #[test]

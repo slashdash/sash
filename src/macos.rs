@@ -221,6 +221,11 @@ pub fn watch_display_changes(waker: rune::Waker) {
     }
 }
 
+/// The system alert sound, for an audible terminal bell.
+pub fn beep() {
+    objc2_app_kit::NSBeep();
+}
+
 /// Keep the panel above the menu bar (window level 24). Level 25 is AppKit's
 /// status-window level; always-on-top goes one higher to cover status items too.
 /// Both remain below transient UI such as menus.

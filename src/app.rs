@@ -17,10 +17,12 @@ use rune::{
 
 use crate::ffi;
 
-use crate::config::{Config, PanelPlacement, Session, SessionTab, TabHighlight};
+use crate::config::{
+    Config, MenuBarClick, PanelPlacement, Session, SessionPane, SessionTab, TabHighlight,
+};
 use crate::macos::Screen;
 use crate::selection::{CellPos, Kind, Selection, line_at, word_at};
-use crate::split::{Dir, GAP, Rect, Tree};
+use crate::split::{Boundary, Dir, GAP, Rect, Tree};
 use crate::term::pty::{Pty, Waker};
 use crate::term::{
     ACCENT, CursorStyle, DEFAULT_BG, DEFAULT_FG, ERROR, FLAG_BOLD, FLAG_FAINT, Progress,
@@ -75,6 +77,8 @@ pub struct Pane {
     pub progress: Option<Progress>,
     /// A visual bell rings until this frame time.
     pub bell_until: f64,
+    /// Bytes to send once the shell has drawn its first prompt, for `sash run`.
+    pub pending_input: Option<Vec<u8>>,
     /// The grid size this pane gets from its share of the panel.
     pub metrics: Metrics,
     /// Its slice of the terminal area, in points, set by `Sash::relayout`.
@@ -110,6 +114,7 @@ impl Pane {
                 fallback_title: "sash".into(),
                 progress: None,
                 bell_until: 0.0,
+                pending_input: None,
                 metrics,
                 rect: Rect::default(),
             };
@@ -154,6 +159,7 @@ impl Pane {
                 fallback_title,
                 progress: None,
                 bell_until: 0.0,
+                pending_input: None,
                 metrics,
                 rect: Rect::default(),
             },
@@ -169,6 +175,7 @@ impl Pane {
                     fallback_title: "sash".into(),
                     progress: None,
                     bell_until: 0.0,
+                    pending_input: None,
                     metrics,
                     rect: Rect::default(),
                 }
@@ -205,6 +212,12 @@ impl Pane {
         } else {
             directory_title(t).unwrap_or_else(|| truncate(t, 28))
         }
+    }
+
+    /// Run this text once the shell has drawn its first prompt. Used by
+    /// `sash run`, where the pty exists before the shell is ready to read.
+    pub fn queue_input(&mut self, text: &str) {
+        self.pending_input = Some(text.as_bytes().to_vec());
     }
 
     pub fn resize(&mut self, metrics: Metrics, screen: Screen) {
@@ -289,6 +302,8 @@ pub struct Tab {
     pub pinned: bool,
     /// Output arrived while this tab was not the one on screen.
     pub unread: bool,
+    /// The focused pane fills the terminal area until zoom is turned off.
+    pub zoomed: bool,
 }
 
 impl Tab {
@@ -308,6 +323,52 @@ impl Tab {
             color: None,
             pinned: false,
             unread: false,
+            zoomed: false,
+        }
+    }
+
+    /// Rebuild a tab from the saved session: every pane gets its own shell, and
+    /// the split tree is restored when it names each pane exactly once.
+    pub fn restore(
+        cfg: &Config,
+        screen: Screen,
+        metrics: Metrics,
+        demo: bool,
+        waker: &Waker,
+        session: &SessionTab,
+    ) -> Self {
+        const MAX_PANES: usize = 8;
+        let cwds: Vec<Option<PathBuf>> = if session.panes.is_empty() {
+            vec![session.cwd.clone()]
+        } else {
+            session
+                .panes
+                .iter()
+                .take(MAX_PANES)
+                .map(|pane| pane.cwd.clone())
+                .collect()
+        };
+        let panes: Vec<Pane> = cwds
+            .iter()
+            .map(|cwd| Pane::new(cfg, screen, metrics, demo, waker, cwd.clone()))
+            .collect();
+        let count = panes.len().max(1);
+        let tree = session
+            .layout
+            .as_ref()
+            .and_then(|layout| Tree::from_layout(layout, count))
+            .unwrap_or_else(|| Tree::row(count));
+        Self {
+            panes,
+            tree,
+            focus: session.focus.min(count - 1),
+            display_name: session.name.clone(),
+            color: session
+                .color
+                .filter(|color| (*color as usize) < TAB_COLORS.len()),
+            pinned: session.pinned,
+            unread: false,
+            zoomed: false,
         }
     }
 
@@ -442,6 +503,10 @@ pub struct Sash {
     pub preedit: Option<String>,
     /// The panel height when a bottom-edge drag began.
     pub resize_drag: Option<f32>,
+    /// The split divider being dragged, if any.
+    pub split_drag: Option<SplitDrag>,
+    /// Last audible bell, so a ringing program cannot flood the speakers.
+    pub last_bell: f64,
     /// The configured height before the panel was maximized, kept for restore.
     pub pre_max: Option<Option<f32>>,
     /// The ⌘P quick open overlay.
@@ -514,6 +579,11 @@ pub struct SettingsPane {
     pub height_drag: Option<f32>,
     /// A note under the controls: a shortcut conflict or a hint.
     pub message: Option<String>,
+    /// Whether the note is an error (red) rather than a confirmation.
+    pub message_error: bool,
+    /// Cached shell-integration state, so the settings frame does not read an
+    /// rc file on every paint.
+    pub shell_status: String,
     /// When the font field last changed, so the config write and re-measure wait
     /// for a pause in the typing.
     pub font_edit_at: Option<Instant>,
@@ -568,6 +638,7 @@ pub enum PaletteAction {
     ClosePane,
     SplitRight,
     SplitDown,
+    ZoomPane,
     Settings,
     OpenPath { path: PathBuf, line: Option<u32> },
     Maximize,
@@ -581,6 +652,16 @@ pub struct PaletteItem {
     /// Extra text the filter can match but the row does not show.
     pub search: String,
     pub action: PaletteAction,
+}
+
+/// A divider being dragged: which split, which axis, and the ratio it started at.
+#[derive(Clone, Debug)]
+pub struct SplitDrag {
+    pub path: Vec<bool>,
+    pub dir: Dir,
+    /// The usable length along the split axis, in points.
+    pub span: f32,
+    pub start_ratio: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -626,15 +707,7 @@ impl Sash {
             .tabs
             .iter()
             .take(12)
-            .map(|tab| {
-                let mut pane = Tab::new(&cfg, screen, metrics, demo, &waker, tab.cwd.clone());
-                pane.display_name = tab.name.clone();
-                pane.color = tab
-                    .color
-                    .filter(|color| (*color as usize) < TAB_COLORS.len());
-                pane.pinned = tab.pinned;
-                pane
-            })
+            .map(|tab| Tab::restore(&cfg, screen, metrics, demo, &waker, tab))
             .collect();
         if tabs.is_empty() {
             tabs.push(Tab::new(&cfg, screen, metrics, demo, &waker, None));
@@ -646,6 +719,12 @@ impl Sash {
             .font_family
             .as_deref()
             .map(|name| &*Box::leak(name.to_owned().into_boxed_str()));
+        let shell_status = crate::integration::status(
+            cfg.shell
+                .clone()
+                .or_else(|| std::env::var("SHELL").ok())
+                .as_deref(),
+        );
         Self {
             cfg,
             screen,
@@ -668,6 +747,7 @@ impl Sash {
             waker,
             settings: SettingsPane {
                 open: settings_open,
+                shell_status,
                 ..Default::default()
             },
             hotkey_id: None,
@@ -690,6 +770,8 @@ impl Sash {
             pending_quit: false,
             preedit: None,
             resize_drag: None,
+            split_drag: None,
+            last_bell: f64::NEG_INFINITY,
             pre_max: None,
             palette: Palette::new(),
             tab_menu: None,
@@ -736,6 +818,7 @@ impl Sash {
             return;
         };
         tab.focus = index;
+        tab.zoomed = false;
         tab.unread = false;
         self.metrics = Some(tab.focused().metrics);
     }
@@ -763,6 +846,7 @@ impl Sash {
         }
         tab.panes.push(pane);
         tab.focus = index;
+        tab.zoomed = false;
         tab.unread = false;
         self.selection = None;
         self.preedit = None;
@@ -796,6 +880,9 @@ impl Sash {
         }
         tab.tree.remap_after_remove(pane_index);
         tab.panes.remove(pane_index);
+        if tab.panes.len() == 1 {
+            tab.zoomed = false;
+        }
         tab.focus = if old_focus == pane_index {
             next_after.min(tab.panes.len() - 1)
         } else if old_focus > pane_index {
@@ -1004,26 +1091,42 @@ impl Sash {
         let area = self.terminal_area();
         let screen = self.screen;
         for tab in &mut self.tabs {
+            if tab.zoomed && tab.panes.len() > 1 {
+                let focus = tab.focus.min(tab.panes.len() - 1);
+                for (index, pane) in tab.panes.iter_mut().enumerate() {
+                    if index == focus {
+                        Self::fit_pane(pane, area, cw, ch, screen);
+                    } else {
+                        pane.rect = Rect::default();
+                    }
+                }
+                continue;
+            }
             for (index, rect) in tab.tree.layout(area, GAP) {
                 let Some(pane) = tab.panes.get_mut(index) else {
                     continue;
                 };
-                pane.rect = rect;
-                let cols = (((rect.w - PAD_X * 2.0).max(cw)) / cw).floor() as u16;
-                let rows = (((rect.h - PAD_Y * 2.0).max(ch)) / ch).floor() as u16;
-                let metrics = Metrics {
-                    cw,
-                    ch,
-                    cols: cols.max(4),
-                    rows: rows.max(2),
-                };
-                pane.resize(metrics, screen);
-                pane.metrics = metrics;
+                Self::fit_pane(pane, rect, cw, ch, screen);
             }
         }
         if let Some(metrics) = self.active_tab().map(|tab| tab.focused().metrics) {
             self.metrics = Some(metrics);
         }
+    }
+
+    /// Give one pane its rectangle and the cells that fit inside it.
+    fn fit_pane(pane: &mut Pane, rect: Rect, cw: f32, ch: f32, screen: Screen) {
+        pane.rect = rect;
+        let cols = (((rect.w - PAD_X * 2.0).max(cw)) / cw).floor() as u16;
+        let rows = (((rect.h - PAD_Y * 2.0).max(ch)) / ch).floor() as u16;
+        let metrics = Metrics {
+            cw,
+            ch,
+            cols: cols.max(4),
+            rows: rows.max(2),
+        };
+        pane.resize(metrics, screen);
+        pane.metrics = metrics;
     }
 
     pub fn term_family(&self) -> Family {
@@ -1087,6 +1190,8 @@ impl Sash {
         self.cancel_rename();
         self.settings.open = true;
         self.settings.message = None;
+        self.settings.message_error = false;
+        self.settings.shell_status = crate::integration::status(self.configured_shell().as_deref());
         self.pending_paste = None;
         self.preedit = None;
         if !self.shown {
@@ -1149,6 +1254,7 @@ impl Sash {
     fn capture_key(&mut self, ev: &KeyEvent, tx: &mut Tx) {
         let Some(code) = tx.physical_key() else {
             self.settings.message = Some("That key can't be used as a shortcut.".into());
+            self.settings.message_error = true;
             return;
         };
         let built = Shortcut::from_physical_key(code, ev.mods)
@@ -1164,6 +1270,7 @@ impl Sash {
                     self.cfg.save();
                     self.settings.capturing = false;
                     self.settings.message = None;
+                    self.settings.message_error = false;
                     self.hotkey_failed = false;
                     self.hotkey_error = None;
                 }
@@ -1175,11 +1282,15 @@ impl Sash {
                         Some(owner) => format!("That shortcut is taken by {owner}."),
                         None => format!("That shortcut is already in use ({e})."),
                     });
+                    self.settings.message_error = true;
                 }
             },
             // No modifier (or a key Rune can't register): keep listening so the user can
             // try the combination again, or press Esc.
-            Err(e) => self.settings.message = Some(e.to_string()),
+            Err(e) => {
+                self.settings.message = Some(e.to_string());
+                self.settings.message_error = true;
+            }
         }
     }
 
@@ -1310,6 +1421,49 @@ impl Sash {
         self.cfg.save();
         self.apply_height(tx);
         self.place();
+    }
+
+    /// Flip the left-click action on the menu-bar ghost.
+    pub fn cycle_menu_bar_click(&mut self) {
+        self.cfg.menu_bar_click = self.cfg.menu_bar_click.next();
+        self.cfg.save();
+        self.apply_menu_bar_click();
+    }
+
+    pub fn apply_menu_bar_click(&self) {
+        if let Some(tray) = &self.tray {
+            tray.set_show_menu_on_left_click(self.cfg.menu_bar_click == MenuBarClick::Menu);
+        }
+    }
+
+    /// Visual → Off → Audible → Both → Visual.
+    pub fn cycle_bell(&mut self) {
+        self.cfg.bell = self.cfg.bell.next();
+        self.cfg.save();
+    }
+
+    fn configured_shell(&self) -> Option<String> {
+        self.cfg
+            .shell
+            .clone()
+            .or_else(|| std::env::var("SHELL").ok())
+    }
+
+    /// Append the OSC 133 hooks for the configured shell. A button, not an
+    /// automatic edit: the user sees the rc file in the confirmation.
+    pub fn install_shell_integration(&mut self) {
+        let shell = self.configured_shell();
+        match crate::integration::install(shell.as_deref()) {
+            Ok(installed) => {
+                self.settings.message = Some(installed.message());
+                self.settings.message_error = false;
+            }
+            Err(e) => {
+                self.settings.message = Some(e);
+                self.settings.message_error = true;
+            }
+        }
+        self.settings.shell_status = crate::integration::status(self.configured_shell().as_deref());
     }
 
     /// `fraction` of the display width; 1.0 stores "full width".
@@ -1802,9 +1956,17 @@ impl Sash {
     }
 
     fn spawn_tab(&mut self, cwd: Option<PathBuf>) {
+        self.spawn_tab_with(cwd, None);
+    }
+
+    /// Open a tab and, for `sash run`, queue text for the shell's first prompt.
+    fn spawn_tab_with(&mut self, cwd: Option<PathBuf>, command: Option<String>) {
         self.close_settings();
         let metrics = self.metrics();
-        let tab = Tab::new(&self.cfg, self.screen, metrics, self.demo, &self.waker, cwd);
+        let mut tab = Tab::new(&self.cfg, self.screen, metrics, self.demo, &self.waker, cwd);
+        if let Some(command) = command {
+            tab.panes[0].queue_input(&format!("{command}\n"));
+        }
         self.tabs.push(tab);
         self.active = self.tabs.len() - 1;
         // A newly appearing strip takes a row back from the grid.
@@ -1817,6 +1979,36 @@ impl Sash {
         if !self.shown {
             self.show();
         }
+    }
+
+    /// Act on a command from the `sash` CLI or another app. Kept beside the
+    /// tray handlers so both entry points share the same actions.
+    pub fn handle_external(&mut self, command: crate::ipc::ExternalCommand, tx: &mut Tx) {
+        use crate::ipc::ExternalCommand;
+        match command {
+            ExternalCommand::Toggle => self.toggle(),
+            ExternalCommand::NewTab { dir } => {
+                let dir = dir.or_else(|| self.active_tab().and_then(Tab::current_dir));
+                self.spawn_tab(dir);
+            }
+            ExternalCommand::Open { path } => {
+                let dir = if path.is_dir() {
+                    Some(path)
+                } else {
+                    path.parent().map(Path::to_path_buf)
+                };
+                self.spawn_tab(dir);
+            }
+            ExternalCommand::Run { command, dir } => {
+                let dir = dir.or_else(|| self.active_tab().and_then(Tab::current_dir));
+                self.spawn_tab_with(dir, Some(command));
+            }
+            ExternalCommand::Settings => self.open_settings(),
+        }
+        if !self.shown {
+            self.show();
+        }
+        tx.instant();
     }
 
     /// Persist the tab list for the next launch.
@@ -1833,6 +2025,15 @@ impl Sash {
                     name: tab.display_name.clone(),
                     color: tab.color,
                     pinned: tab.pinned,
+                    panes: tab
+                        .panes
+                        .iter()
+                        .map(|pane| SessionPane {
+                            cwd: pane.current_dir(),
+                        })
+                        .collect(),
+                    layout: Some(tab.tree.to_layout()),
+                    focus: tab.focus,
                 })
                 .collect(),
             active: self.active,
@@ -2113,6 +2314,7 @@ impl Sash {
             ("Close Pane", "⌘W", PaletteAction::ClosePane),
             ("Split Right", "⌘D", PaletteAction::SplitRight),
             ("Split Down", "⌘⇧D", PaletteAction::SplitDown),
+            ("Zoom Pane", "⌘⇧Return", PaletteAction::ZoomPane),
             ("Settings", "⌘,", PaletteAction::Settings),
             ("Maximize Panel", "⌘⇧M", PaletteAction::Maximize),
             ("Larger Font", "⌘+", PaletteAction::FontUp),
@@ -2194,12 +2396,27 @@ impl Sash {
             PaletteAction::ClosePane => self.request_close_focused(),
             PaletteAction::SplitRight => self.split_focused(Dir::Right),
             PaletteAction::SplitDown => self.split_focused(Dir::Down),
+            PaletteAction::ZoomPane => self.toggle_zoom(),
             PaletteAction::OpenPath { path, line } => open_in_editor(&path, line),
             PaletteAction::Settings => self.open_settings(),
             PaletteAction::Maximize => self.toggle_maximize(tx),
             PaletteAction::FontUp => self.set_font_size(self.cfg.font_size + 1.0),
             PaletteAction::FontDown => self.set_font_size(self.cfg.font_size - 1.0),
         }
+    }
+
+    /// Fill the tab with its focused pane, tmux style, or return to the split.
+    pub fn toggle_zoom(&mut self) {
+        let Some(tab) = self.tabs.get_mut(self.active) else {
+            return;
+        };
+        if tab.panes.len() < 2 {
+            return;
+        }
+        tab.zoomed = !tab.zoomed;
+        self.selection = None;
+        self.preedit = None;
+        self.relayout();
     }
 
     /// ⌘⇧M: fill the space above the Dock, or go back to the configured height.
@@ -2281,6 +2498,8 @@ impl Sash {
         let mut changed = false;
         let (active, visible) = (self.active, self.shown && !self.settings.open);
         let now = self.now;
+        let bell = self.cfg.bell;
+        let mut ring_audible = false;
         let mut announcements = Vec::new();
         for (index, tab) in self.tabs.iter_mut().enumerate() {
             let active_tab = visible && index == active;
@@ -2292,6 +2511,11 @@ impl Sash {
                         changed = true;
                         if !active_tab {
                             tab.unread = true;
+                        }
+                        // The first output means the shell has drawn its prompt and
+                        // is ready for the queued `sash run` command.
+                        if let Some(input) = pane.pending_input.take() {
+                            pty.write(&input);
                         }
                     }
                     let replies = pane.vt.take_replies();
@@ -2308,9 +2532,14 @@ impl Sash {
                     }
                 }
                 if pane.vt.take_bell() {
-                    pane.bell_until = now + 0.45;
-                    changed = true;
-                    if !active_tab {
+                    if bell.visual() {
+                        pane.bell_until = now + 0.45;
+                        changed = true;
+                    }
+                    if bell.audible() {
+                        ring_audible = true;
+                    }
+                    if (bell.visual() || bell.audible()) && !active_tab {
                         tab.unread = true;
                     }
                 }
@@ -2361,6 +2590,10 @@ impl Sash {
                     changed = true;
                 }
             }
+        }
+        if ring_audible && now - self.last_bell >= 0.12 {
+            self.last_bell = now;
+            crate::macos::beep();
         }
         self.announce(announcements);
         changed
@@ -2574,6 +2807,10 @@ impl Sash {
                 }
                 return;
             }
+        }
+        if ev.mods.cmd && ev.mods.shift && !ev.mods.ctrl && !ev.mods.alt && ev.key == Key::Enter {
+            self.toggle_zoom();
+            return;
         }
         if let Key::Command(c) = ev.key {
             match c {
@@ -3321,6 +3558,13 @@ fn settings_page(s: &Sash) -> El {
         .child(separator("sep-placement", hair))
         .child(setting_row(
             s,
+            "set-menu-bar-click",
+            "Menu-bar click",
+            menu_bar_click_control(s),
+        ))
+        .child(separator("sep-menu-bar-click", hair))
+        .child(setting_row(
+            s,
             "set-opacity",
             "Background opacity",
             slider_row(
@@ -3451,6 +3695,15 @@ fn settings_page(s: &Sash) -> El {
         .child(separator("sep-shell", hair))
         .child(setting_row(
             s,
+            "set-shell-integration",
+            "Shell integration",
+            shell_integration_control(s),
+        ))
+        .child(separator("sep-shell-integration", hair))
+        .child(setting_row(s, "set-bell", "Bell", bell_control(s)))
+        .child(separator("sep-bell", hair))
+        .child(setting_row(
+            s,
             "set-scrollback",
             "Scrollback",
             slider_row(
@@ -3555,7 +3808,7 @@ fn settings_page(s: &Sash) -> El {
         );
 
     let mut note = s.settings.message.clone();
-    let note_error = note.is_some() || s.hotkey_error.is_some();
+    let note_error = s.settings.message_error || s.hotkey_error.is_some();
     if note.is_none() && s.settings.capturing {
         note = Some("Press a combination with ⌘, ⌃ or ⌥. Esc cancels.".into());
     }
@@ -3691,6 +3944,7 @@ fn shortcuts_card(s: &Sash) -> El {
         ("⌘D", "Split right"),
         ("⌘⇧D", "Split down"),
         ("⌘[  ⌘]", "Focus pane"),
+        ("⌘⇧Return", "Zoom pane"),
         ("⌘⇧[  ⌘⇧]", "Switch tab"),
         ("⌃Tab", "Cycle tabs"),
         ("Drag tab", "Reorder"),
@@ -3856,6 +4110,84 @@ fn placement_control(s: &Sash) -> El {
                 .color(t.text)
                 .w_full()
                 .truncate(),
+        )
+}
+
+fn menu_bar_click_control(s: &Sash) -> El {
+    let t = s.theme();
+    let label = s.cfg.menu_bar_click.label();
+    el().key("menu-bar-click-button")
+        .role("button")
+        .label(format!("Menu-bar click: {label}"))
+        .h(27.0)
+        .w(240.0)
+        .px(11.0)
+        .radius(6.0)
+        .center()
+        .focusable(true)
+        .fill(Color::WHITE.alpha(0.07))
+        .border(1.0, Color::WHITE.alpha(0.12))
+        .on_press(|s: &mut Sash| s.cycle_menu_bar_click())
+        .child(
+            text(label)
+                .font(s.small_style(500.0, 12.0))
+                .color(t.text)
+                .w_full()
+                .truncate(),
+        )
+}
+
+fn bell_control(s: &Sash) -> El {
+    let t = s.theme();
+    let label = s.cfg.bell.label();
+    el().key("bell-button")
+        .role("button")
+        .label(format!("Bell: {label}"))
+        .h(27.0)
+        .w(240.0)
+        .px(11.0)
+        .radius(6.0)
+        .center()
+        .focusable(true)
+        .fill(Color::WHITE.alpha(0.07))
+        .border(1.0, Color::WHITE.alpha(0.12))
+        .on_press(|s: &mut Sash| s.cycle_bell())
+        .child(
+            text(label)
+                .font(s.small_style(500.0, 12.0))
+                .color(t.text)
+                .w_full()
+                .truncate(),
+        )
+}
+
+fn shell_integration_control(s: &Sash) -> El {
+    let t = s.theme();
+    row()
+        .gap(8.0)
+        .center_y()
+        .child(
+            text(s.settings.shell_status.clone())
+                .font(s.small_style(400.0, 11.0))
+                .color(t.text_secondary.alpha(0.7)),
+        )
+        .child(
+            el().key("shell-integration-button")
+                .role("button")
+                .label("Install shell integration")
+                .h(27.0)
+                .px(11.0)
+                .radius(6.0)
+                .center()
+                .focusable(true)
+                .fill(Color::WHITE.alpha(0.07))
+                .border(1.0, Color::WHITE.alpha(0.12))
+                .on_press(|s: &mut Sash| s.install_shell_integration())
+                .child(
+                    text("Install")
+                        .font(s.small_style(500.0, 12.0))
+                        .color(t.text),
+                ),
         )
 }
 
@@ -4841,12 +5173,79 @@ fn terminal(s: &Sash) -> El {
     };
     let split = tab.panes.len() > 1;
     for (index, pane) in tab.panes.iter().enumerate() {
+        if tab.zoomed && index != tab.focus {
+            continue;
+        }
         root = root.child(pane_terminal(s, pane, index, index == tab.focus, split));
+    }
+    if split && !tab.zoomed {
+        for (index, boundary) in tab
+            .tree
+            .boundaries(s.terminal_area(), GAP)
+            .iter()
+            .enumerate()
+        {
+            root = root.child(split_divider(boundary, index));
+        }
     }
     if s.pending_paste.is_some() {
         root = root.child(paste_overlay(s));
     }
     root
+}
+
+/// The invisible grab strip over a split's hairline gap. Dragging it moves the
+/// ratio; the panes' own pty sizes catch up through relayout.
+fn split_divider(boundary: &Boundary, index: usize) -> El {
+    let path = boundary.path.clone();
+    let dir = boundary.dir;
+    let span = boundary.span;
+    let start_ratio = boundary.ratio;
+    el().key(format!("split-divider-{index}"))
+        .absolute(boundary.rect.x, boundary.rect.y)
+        .w(boundary.rect.w)
+        .h(boundary.rect.h)
+        .fill(Color::WHITE.alpha(0.03))
+        .on_drag(
+            move |s: &mut Sash, d: &mut Drag, tx: &mut Tx| match d.phase {
+                Phase::Down => {
+                    s.split_drag = Some(SplitDrag {
+                        path: path.clone(),
+                        dir,
+                        span,
+                        start_ratio,
+                    });
+                }
+                Phase::Move => {
+                    let Some(drag) = s.split_drag.clone() else {
+                        return;
+                    };
+                    let delta = match dir {
+                        Dir::Right => d.dx,
+                        Dir::Down => d.dy,
+                    };
+                    let ratio = drag.start_ratio + delta / drag.span.max(1.0);
+                    if let Some(tab) = s.active_tab_mut() {
+                        tab.tree.set_ratio_at(&drag.path, ratio);
+                    }
+                    s.relayout();
+                    tx.instant();
+                }
+                Phase::Up => {
+                    let Some(drag) = s.split_drag.take() else {
+                        return;
+                    };
+                    if d.cancelled() {
+                        if let Some(tab) = s.active_tab_mut() {
+                            tab.tree.set_ratio_at(&drag.path, drag.start_ratio);
+                        }
+                        s.relayout();
+                    } else {
+                        s.save_session();
+                    }
+                }
+            },
+        )
 }
 
 /// One pane's grid, overlays and pointer handling, placed at its slice of the
