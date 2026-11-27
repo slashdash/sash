@@ -2501,6 +2501,10 @@ impl Sash {
         let bell = self.cfg.bell;
         let mut ring_audible = false;
         let mut announcements = Vec::new();
+        // (tab, pane) pairs whose shell has gone. Closing happens after the
+        // borrow of `self.tabs` ends, highest indices first so removals do not
+        // shift the pair still waiting.
+        let mut exited = Vec::new();
         for (index, tab) in self.tabs.iter_mut().enumerate() {
             let active_tab = visible && index == active;
             for (pane_index, pane) in tab.panes.iter_mut().enumerate() {
@@ -2527,7 +2531,7 @@ impl Sash {
                         // A child that exited on its own leaves a zombie until it is
                         // waited on; the pty being dropped is not enough.
                         let _ = pty.try_wait();
-                        pane.vt.write(b"\r\n\x1b[90m[sash] process exited. \xe2\x8c\x98T opens a new tab.\x1b[0m\r\n");
+                        exited.push((index, pane_index));
                         changed = true;
                     }
                 }
@@ -2591,12 +2595,36 @@ impl Sash {
                 }
             }
         }
+        for (tab_index, pane_index) in exited.into_iter().rev() {
+            self.close_exited_pane(tab_index, pane_index);
+        }
         if ring_audible && now - self.last_bell >= 0.12 {
             self.last_bell = now;
             crate::macos::beep();
         }
         self.announce(announcements);
         changed
+    }
+
+    /// A shell that exited on its own takes its pane with it: another pane in
+    /// the split stays, the last pane closes the tab, and the last tab rolls the
+    /// panel up. Pinning is about accidental closes, not a dead prompt.
+    fn close_exited_pane(&mut self, tab_index: usize, pane_index: usize) {
+        let Some(tab) = self.tabs.get(tab_index) else {
+            return;
+        };
+        if pane_index >= tab.panes.len() {
+            return;
+        }
+        eprintln!("sash: shell exited; closing pane {pane_index} of tab {tab_index}");
+        let last_pane = tab.panes.len() == 1;
+        if last_pane
+            && tab.pinned
+            && let Some(tab) = self.tabs.get_mut(tab_index)
+        {
+            tab.pinned = false;
+        }
+        self.close_pane(tab_index, pane_index);
     }
 
     /// Desktop notifications only when the panel is not already in front of the user,

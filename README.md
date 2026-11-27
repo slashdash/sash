@@ -62,6 +62,8 @@ Rune draws the frame; libghostty-vt owns every byte of terminal state.
   tree, geometry and focus. Drag the divider between two panes to change the
   split, and press `⌘⇧Return` to zoom the focused pane and back.
 - Split trees, ratios and the focused pane come back after a relaunch.
+- A shell that exits (Ctrl-D or `exit`) takes its pane with it. The last pane
+  closes the tab, and the last tab rolls the panel back up.
 
 ### Terminal
 

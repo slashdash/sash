@@ -10,6 +10,8 @@ All notable changes to Sash are recorded here. The format follows
 
 - Split panes are resizable by dragging their divider and zoomable with
   `⌘⇧Return`; split trees, ratios and focus are restored across launches.
+- A shell that exits closes its pane; the last pane closes the tab and the last
+  tab hides the panel.
 - Configurable bell: `off`, `visual`, `audible` or `both` (default `visual`).
 - `menu_bar_click` setting: left-click toggles the panel (default) or opens the
   existing menu; right-click always opens the menu.
